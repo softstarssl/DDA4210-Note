@@ -462,7 +462,7 @@ optimizing ranking-specific objectives such as pairwise or listwise losses.
 \end{itemize}
 (叽里咕噜说什么在)
 
-\section{Lec4: Graph Cut and Spectral Clustering(谱聚类)}
+\section{Lec4-1: Graph Cut and Spectral Clustering(谱聚类)}
 \subsection{Graph Paritition}
 A similarity graph G=(V,E,W) represents data points as vertices V, 
 with an edge in E when the pairwise similarity is positive and weights W storing those affinities.
@@ -562,7 +562,7 @@ Therefore
 (这几把都是什么玩意？好像是上面的推导吧)\\
 (不管了，反正是 optional，摆在这图个吉利)
 
-\paragraph{Conclusion}
+\subsubsection*{Conclusion}
 \begin{itemize}
     \item Ncut is equivalent to minimizing the Rayleigh quotient $\dfrac{u^\top L u}{u^\top D u}$, i.e.,
     \[
@@ -577,6 +577,35 @@ Therefore
     taking the eigenvector corresponding to the \textbf{second smallest eigenvalue} as the relaxed solution.
     \item Equivalently, use the normalized Laplacian $\widetilde{L}=D^{-1}L=I-D^{-1}W$.\\ Obtain a binary partition by thresholding $u$ at $0$: $i\in A$ if $u_i\ge0$, else $i\in B$.
     \item Extend to $k$ clusters by using the first $k$ nontrivial eigenvectors and applying $k$-means (spectral clustering).
-    \item (人话：2类划分找第二小特征值对应的特征向量，多类划分用前k个非平凡特征向量，然后k-means聚类。)
+    \item (人话：2类划分找第二小特征值对应的特征向量，k类划分用前k个非平凡特征向量，然后k-means聚类。)
 \end{itemize}
+(事实上还是没看懂，插个眼以后复习的时候看看有没有什么需要补的)
+
+\subsection{Spectral Clustering Algorithm}
+\begin{itemize}
+    \item Input: data $X=\{x_1,x_2,\ldots,x_N\}$ and number $K$ of clusters.
+    \item \textbf{Step 1}: Construct a similarity (affinity) matrix $W$ (e.g. Gaussian kernel)
+    \[w_{ij}=\exp\left(-\frac{\|x_i-x_j\|^2}{2\sigma^2}\right)\]
+    and build either a $k$-nearest neighbor or $\epsilon$-neighborhood graph.
+    \item \textbf{Step 2}: Compute Laplacian $L$ (or normalized variants):
+    \[L=D-W,\qquad \widetilde{L}=D^{-1}L=I-D^{-1}W,\qquad \hat{L}_{sym}=I-D^{-1/2}WD^{-1/2}.
+    \]
+    \item \textbf{Step 3}: Eigen-decompose (normalized) Laplacian and take first $K$ nontrivial eigenvectors to form $Z= [v_1,\ldots,v_K]^\top\in\mathbb{R}^{K\times N}$.(对 L 做特征值分解)
+    \item \textbf{Step 4}: Normalize the columns (row-wise embedding) to unit $\ell_2$ norm(归一化):
+    \[z_i\leftarrow z_i/\|z_i\|,\quad i=1,\ldots,N.
+    \]
+    \item \textbf{Step 5}: Run $K$-means on $\{z_1,\ldots,z_N\}$ and output $K$ clusters (assignments on $Z$ or map back to $X$).
+    \item Notes: use $\widetilde{L}_{sym}$ (symmetric normalized) for best numerical stability; thresholding the second eigenvector recovers a binary partition.
+    \item \textbf{Properties of L:}\\
+    For $L = D - W$ or $\hat{L} = I - D^{-1/2} W D^{-1/2}$
+    \begin{itemize}
+        \item $L$ (and $\hat{L}$) are symmetric and positive semi-definite.(对称 + 半正定)
+        \item Eigenvalues satisfy $0=\lambda_1\le\lambda_2\le\cdots\le\lambda_N$.
+        \item The multiplicity $K$ of eigenvalue $0$ equals the number of connected components of the graph (hence $K$ clusters).
+        (0特征值的数量等于图的连通分量数，也就是聚类数)
+    \end{itemize}
+\end{itemize}
+
+\section{Lec4-2: Semi-Supervised Learning}
+to be continued...
 \end{document}
