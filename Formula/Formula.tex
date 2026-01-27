@@ -6,7 +6,11 @@
 \usepackage[english]{datetime2}
 \usepackage{fancyhdr}
 \usepackage{geometry}
+\usepackage{graphicx}   % 插图用的宏包
+% 可选：如果你想方便指定默认图片路径，可以加一行：
+\graphicspath{{figures/}} % 告诉 LaTeX 图片都在 figures 文件夹里
 
+\usepackage{float}
 % 调整页边距，提高空间利用率
 \geometry{
     a4paper,
@@ -456,7 +460,123 @@ optimizing ranking-specific objectives such as pairwise or listwise losses.
         \end{itemize}
     \end{itemize}
 \end{itemize}
+(叽里咕噜说什么在)
 
-\section{Lec4: }
-% to be continued...
+\section{Lec4: Graph Cut and Spectral Clustering(谱聚类)}
+\subsection{Graph Paritition}
+A similarity graph G=(V,E,W) represents data points as vertices V, 
+with an edge in E when the pairwise similarity is positive and weights W storing those affinities.
+The affinity matrix records these pairwise similarities.
+Graph partitioning (clustering) aims to split the graph so that edges inside a group have large weights while edges across groups have small weights.
+(人话：图划分就是把图分成若干部分，使得每个部分内的节点之间联系紧密(组内权重大)，而不同部分之间的联系较弱(组间权重小)。)
+\\
+
+Given data points, a similarity graph can be constructed using methods such as \textbf{k-nearest neighbor or $\epsilon$-neighborhood}. The edge weights are often defined by a \textbf{Gaussian kernel}:
+\[
+k(x_i, x_j) = \exp\left(-\frac{\|x_i - x_j\|^2}{2\sigma^2}\right)
+\]
+
+\subsection{Minimum Cut}
+\begin{itemize}
+    \item Minimum cut: partition the graph into two sets $A$ and $B$ minimizing
+    $\mathrm{cut}(A,B):=\sum_{i\in A,\,j\in B} w_{ij}$.
+    \item Solvable efficiently (e.g. via max-flow/min-cut algorithms, typical cost O(|V||E|)),
+    but the minimum cut often yields unbalanced solutions (it may isolate vertices).
+    (人话：最小割可以高效求解，但结果往往不平衡，可能会把一些节点孤立出来。)
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.6\textwidth]{figures/minimum-cut.png}
+        \caption{Minimum Cut Example}
+        \label{fig:minimum-cut}
+    \end{figure}
+    (画的不错的一张图)
+    \item To address this, we can use \textbf{Normalized Cut (Ncut)}:
+\end{itemize}
+
+\subsection{Normalized Cut}
+% Concise summary of Normalized Cut
+Normalized Cut balances cut weight with cluster sizes. For a partition (A,B), define
+\[\mathrm{vol}(A)=\sum_{i\in A} d_i,\quad d_i=\sum_{j} w_{ij},\]
+and
+\[\mathrm{Ncut}(A,B):=\mathrm{cut}(A,B)\left(\frac{1}{\mathrm{vol}(A)}+\frac{1}{\mathrm{vol}(B)}\right).
+\]
+\begin{itemize}
+    \item Minimizing Ncut favors balanced partitions but is \textbf{NP-hard};
+    \item \textbf{spectral clustering (谱聚类)} provides an efficient relaxation.
+\end{itemize}
+ 
+\subsubsection{Degree Matrix and Graph Laplacian}
+
+\[
+W=\begin{bmatrix}
+w_{11} & w_{12} & \cdots & w_{1N} \\
+w_{21} & w_{22} & \cdots & w_{2N} \\
+\vdots & \vdots & \ddots & \vdots \\
+w_{N1} & w_{N2} & \cdots & w_{NN}
+\end{bmatrix}
+\]
+
+\[
+D=\begin{bmatrix}
+d_1 & 0 & \cdots & 0 \\
+0 & d_2 & \cdots & 0 \\
+\vdots & \vdots & \ddots & \vdots \\
+0 & 0 & \cdots & d_N
+\end{bmatrix},\qquad d_j=\sum_{i=1}^N w_{ij}.
+\]
+
+\begin{itemize}
+    \item $D$ is the \textbf{degree matrix}. And the \textbf{graph Laplacian matrix} is defined as
+    \[L:=D-W.
+    \]
+    \item Properties: $L$ is symmetric positive semi-definite, $\mathbf{1}^\top L=0$, and its eigenvectors are used in spectral clustering (relaxation of Ncut).
+\end{itemize}
+
+\subsubsection{Normalized Cut and Graph Laplacian}
+
+\subsubsection*{Mathematical derivation (optional)}
+
+Recall $L=D-W$ and $D=\mathrm{diag}(d_1,\ldots,d_N)$. 
+
+Let $u=[u_1,u_2,\ldots,u_N]^\top$ with
+\[
+u_i=\begin{cases}
+\dfrac{1}{\mathrm{vol}(A)}, &\text{if } i\in A,\\[4pt]
+-\dfrac{1}{\mathrm{vol}(B)}, &\text{if } i\in B.
+\end{cases}
+\]
+
+Then
+\[
+u^\top L u=\tfrac{1}{2}\sum_{i,j} w_{ij}(u_i-u_j)^2=\sum_{i\in A, j\in B} w_{ij}\left(\frac{1}{\mathrm{vol}(A)}+\frac{1}{\mathrm{vol}(B)}\right)
+\]
+and
+\[
+u^\top D u=\sum_i d_i u_i^2=\sum_{i\in A}\frac{d_i}{\mathrm{vol}(A)^2}+\sum_{j\in B}\frac{d_j}{\mathrm{vol}(B)^2}=\frac{1}{\mathrm{vol}(A)}+\frac{1}{\mathrm{vol}(B)}.
+\]
+
+Therefore
+\[
+\frac{u^\top L u}{u^\top D u}=\sum_{i\in A, j\in B} w_{ij}\left(\frac{1}{\mathrm{vol}(A)}+\frac{1}{\mathrm{vol}(B)}\right)=\mathrm{Ncut}(A,B).
+\]
+(这几把都是什么玩意？好像是上面的推导吧)\\
+(不管了，反正是 optional，摆在这图个吉利)
+
+\paragraph{Conclusion}
+\begin{itemize}
+    \item Ncut is equivalent to minimizing the Rayleigh quotient $\dfrac{u^\top L u}{u^\top D u}$, i.e.,
+    \[
+    \min_{A,B}\mathrm{Ncut}(A,B)\iff \min_{u}\frac{u^\top L u}{u^\top D u},\quad u\in\mathbb{R}^N,\quad
+    u_i=\begin{cases}\dfrac{1}{\mathrm{vol}(A)},&i\in A,\\[4pt]-\dfrac{1}{\mathrm{vol}(B)},&i\in B.\end{cases}
+    \]
+    \item Equivalent formulation: minimize the quotient subject to $u^\top D\mathbf{1}=0$ and binary constraints $u_i\in\{1,-b\}$ (for some $b>0$).
+    \item Relaxation: 
+    \[
+    L u = \lambda D u,
+    \]
+    taking the eigenvector corresponding to the \textbf{second smallest eigenvalue} as the relaxed solution.
+    \item Equivalently, use the normalized Laplacian $\widetilde{L}=D^{-1}L=I-D^{-1}W$.\\ Obtain a binary partition by thresholding $u$ at $0$: $i\in A$ if $u_i\ge0$, else $i\in B$.
+    \item Extend to $k$ clusters by using the first $k$ nontrivial eigenvectors and applying $k$-means (spectral clustering).
+    \item (人话：2类划分找第二小特征值对应的特征向量，多类划分用前k个非平凡特征向量，然后k-means聚类。)
+\end{itemize}
 \end{document}
