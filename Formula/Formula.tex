@@ -606,6 +606,112 @@ Therefore
     \end{itemize}
 \end{itemize}
 
-\section{Lec4-2: Semi-Supervised Learning}
+\section{Lec4-2: Semi-Supervised Learning (SSL, 半监督学习)}
+\subsection{Notations}
+
+\begin{itemize}
+    \item Input (or feature) $\mathbf{x} \in \mathcal{X}$, output (or label) $\mathbf{y} \in \mathcal{Y}$
+    \item Learner $f : \mathcal{X} \to \mathcal{Y}$
+    \item Labeled data $(X_l, Y_l) = \{(\mathbf{x}_1, \mathbf{y}_1), \dots, (\mathbf{x}_l, \mathbf{y}_l)\}$
+    \item Unlabeled data $X_u = \{\mathbf{x}_{l+1}, \dots, \mathbf{x}_N\}$, available during training
+    \item Loss function $\ell : \mathcal{Y} \times \mathcal{Y} \to \mathbb{R}$
+    \item Usually, $l \ll N$
+    \item Test data $X_{\text{test}} = \{ \mathbf{x}_{N+1}, \dots \}$, not available during training
+\end{itemize}
+\paragraph{Why Semi-Supervised Learning?} ~\\
+Labeled data is often \textbf{scarce, expensive}, and requires expert annotation or specialized equipment. 
+In contrast, unlabeled data is \textbf{abundant and cost-effective}. 
+By leveraging both, we can build more robust and high-performing machine learning models.
+
+\subsection{Self-Training Algorithm}
+% --- 第一个 subsubsection：自训练算法基础 ---
+\paragraph{Assumption:} One's own high confidence predictions are correct.(人话：自己高置信度的预测是正确的)
+
+\subsubsection{Algorithm Procedure:}
+\begin{enumerate}
+    \item Train model $f$ from labeled data $(X_l, Y_l)$.
+    \item Predict labels for unlabeled data $x \in X_u$. (用有标签数据训练模型，然后对无标签数据进行预测)
+    \item Add the pseudo-labeled pairs $(x, f(x))$ to the labeled training set. (把预测结果当作新的标签加入训练集)
+    \item Repeat the process until a stopping criterion is met.
+\end{enumerate}
+
+% --- 第二个 subsubsection：算法变体 ---
+\subsubsection{Variations of Self-Training}
+Depending on how pseudo-labeled data is incorporated, there are several variations:
+\begin{itemize}
+    \item \textbf{Most Confident:} Add only a few samples $(x, f(x))$ with the highest prediction confidence to the labeled data. (人话：只添加那些模型最有信心的预测结果)
+    \item \textbf{All Samples:} Add all predicted $(x, f(x))$ directly to the labeled data.(直接把所有预测结果都加入训练集)
+    \item \textbf{Weighted Approach:} Add all $(x, f(x))$ to the labeled data, but assign different weights to each sample according to its prediction confidence.
+    (根据预测置信度给每个样本分配不同的权重)
+\end{itemize}
+
+% --- 第三个 subsubsection：具体应用实例 ---
+\subsubsection{Self-Training Algorithm: Propagating 1-NN (传播1-NN)}
+This is a specific instance of self-training using the 1-Nearest Neighbor (1-NN) approach:
+\begin{enumerate}
+    \item Classify an unlabeled sample $x$ using the 1-NN rule (assigning the label of its nearest labeled neighbor).(用1-NN方法对无标签样本进行分类，分配最近的有标签邻居的标签)
+    \item Add the newly labeled pair $(x, f(x))$ to the labeled dataset and repeat the process.
+\end{enumerate}
+
+\paragraph{Advantages and Disadvantages} 
+\begin{itemize}
+    \item \textbf{Pros:} It is the simplest semi-supervised approach, serves as a versatile wrapper method, and is widely utilized in Natural Language Processing (NLP).
+    \item \textbf{Cons:} The method is sensitive to outliers, and early classification errors can lead to self-reinforcing mistakes.
+    (对异常值敏感)
+\end{itemize}
+
+\subsection{Graph based SSL methods}
+\paragraph{Assumption: }A graph is given on the labeled and unlabeled data.  
+Instances connected by heavy edge tend to have the same label(由重边连接的实例往往具有相同的标签)
+\\
+人话就是边的权重反应了两个节点(数据点)，之间的相似程度，边权越大，数据点越相似
+\subsubsection{Graph Construction} 
+\begin{itemize}
+    \item \textbf{Nodes:} The set of nodes is the union of labeled and unlabeled data, $X_l \cup X_u$.
+    \item \textbf{Edges:} Constructed via a $k$-Nearest Neighbor graph (unweighted) 
+    or a fully connected graph where weights decay with distance (全连接图,权重随距离衰减):
+    $$w_{ij} = \exp\left(-\frac{\|x_i - x_j\|^2}{2\sigma^2}\right)$$
+    \item $w_{ij}$ 是高斯核的那个函数，反映了数据点之间的相似度
+\end{itemize}
+
+\paragraph{Regularized Classifier}
+A standard classifier learns by minimizing a loss term combined with regularization (e.g., LASSO or Regularized Least Squares). We can extend this to semi-supervised learning by using unlabeled data for regularization.
+
+\paragraph{Graph-Based Regularization}
+The core principle is that if two instances $x_i$ and $x_j$ are similar (indicated by a large edge weight $w_{ij}$), 
+their predicted labels $f(x_i)$ and $f(x_j)$ should also be similar. 
+This leads to the following optimization problem: \\
+其实就是学习一个学习器来使得损失函数 + 正则化项最小
+$$\min_{f} \sum_{i=1}^{l} \ell(y_i, f(x_i)) + \lambda \sum_{i=1}^{N} \sum_{j=1}^{N} w_{ij} \|f(x_i) - f(x_j)\|^2$$
+
+\textbf{第一项：} 有标签数据的损失。
+\textbf{第二项：} 图正则化项，强制相似点有相似预测。
+\textbf{$\lambda$：} 正则化参数。
+
+% Section 7: Consistency and Topology (image_1b3949.png)
+\paragraph{Algorithm Objectives}
+The graph-based algorithm operates with two primary goals:
+\begin{itemize}
+    \item \textbf{Label Constraint:} It enforces the correct labels on the existing labeled data.
+    \item \textbf{Manifold Consistency:} It maximizes the consistency of unlabeled examples relative to the underlying graph topology.
+\end{itemize}
+
+\subsubsection{Label Propagation Algorithm (标签传播算法)}
+\begin{enumerate}
+    \item Compute affinity matrix $W$ (亲和矩阵).
+    \item Compute degree matrix $D$, where $D_{ii} = \sum_j W_{ij}$.
+    \item Initialize $\hat{Y}^{(0)} \leftarrow (y_1, \dots, y_l, 0, 0, \dots, 0)$.
+    \item Iterate: $\hat{Y}^{(t+1)} = D^{-1}W\hat{Y}^{(t)}$, fix labels of labeled data.
+    \item Repeat until convergence.
+    \item Assign labels based on the sign of $\hat{y}_i^{(\infty)}$.
+\end{enumerate}
+
+\begin{itemize}
+    \item The algorithm forces the labels on the labeled data (强制在标记数据上保留标签)
+    \item The algorithm tries to maximizes the consistency of the unlabeled examples with the topology of the graph (试图使未标记示例与图的拓扑结构保持最大程度的一致性)
+\end{itemize}
+其实到最后也不知道这一讲到底细讲了什么，并没有什么公式(雾)
+
+\section{Lec5: GNN}
 to be continued...
 \end{document}
