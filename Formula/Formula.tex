@@ -817,6 +817,103 @@ The graph-based algorithm operates with two primary goals:
     \end{itemize}
     很好，依然是 optional, 依然看不懂一点
 \end{itemize}
+
 \section{Lec6: Non-Linear Dimensionality Reduction}
+\subsection{Locally Linear Embedding (LLE)}
+\begin{itemize}
+    \item \textbf{Core Intuition}: Based on the geometric intuition of \textbf{local linearity}. It assumes that each sample and its neighbors lie on or near a locally linear patch of a low-dimensional manifold(流形) embedded in a high-dimensional space.
+    \item \textbf{LLE Assumption}: The projection from high to low dimensionality should preserve neighborhood relationships:
+    \begin{itemize}
+        \item Projected data points should maintain the same neighbors as in the original space.(人话就是投影后的数据点应该和原空间中的数据点保持相同的邻居关系)
+        \item The \textbf{locally linear representation} (reconstruction weights) should be preserved.
+    \end{itemize}
+    \item \textbf{Algorithm Steps}:
+    \begin{enumerate}
+        \item \textbf{Find Neighbors}: For each $\mathbf{x}_i$, find its $k$ nearest neighbors $\mathcal{N}_i^k$ ($k \ge d+1$,k 一般比 d 大一点).
+        \item \textbf{Compute Weights $\mathbf{W}$}: Solve for weights that reconstruct $\mathbf{x}_i$ from neighbors:
+        $$\mathbf{W} = \text{argmin}_{\mathbf{W}} \sum_{i=1}^N \|\mathbf{x}_i - \sum_{j \in \mathcal{N}_i^k} w_{ij} \mathbf{x}_j\|^2, \quad \text{s.t. } \forall i \sum_{j \in \mathcal{N}_i^k} w_{ij} = 1$$
+        $w_{i,j}$: locally linear reconstruction weights,局部线性重建权重，且其和为1
+        \item \textbf{Compute Projections $\mathbf{Z}$}: Fix $\mathbf{W}$, find low-dimensional $\mathbf{z}_i \in \mathbb{R}^d$:
+        $$\mathbf{Z} = \text{argmin}_{\mathbf{Z}} \sum_{i=1}^N \|\mathbf{z}_i - \sum_{j \in \mathcal{N}_i^k} w_{ij} \mathbf{z}_j\|^2, \quad \text{s.t. } \sum \mathbf{z}_i = 0, \frac{1}{N} \mathbf{Z}\mathbf{Z}^\top = \mathbf{I}$$
+    \end{enumerate}
+    \item \textbf{Solution for $\mathbf{Z}$}: We have:
+    $$\sum_{i=1}^{N} \|\mathbf{z}_i - \sum_{j \in \mathcal{N}_i^k} w_{ij}\mathbf{z}_j\|^2 = \|\mathbf{Z} - \mathbf{Z}\mathbf{W}\|_F^2 = \text{trace} \left( \mathbf{Z}(\mathbf{I} - \mathbf{W})(\mathbf{I} - \mathbf{W}^\top)\mathbf{Z}^\top \right)$$
+    The cost function is equivalent to $\text{trace}(\mathbf{Z}(\mathbf{I}-\mathbf{W})(\mathbf{I}-\mathbf{W})^\top \mathbf{Z}^\top)$. $\mathbf{Z}$ is composed of the $d$ eigenvectors of $(\mathbf{I}-\mathbf{W})(\mathbf{I}-\mathbf{W})^\top$ corresponding to the \textbf{smallest $d$ non-zero eigenvalues}.\\
+    (z 由$(\mathbf{I} - \mathbf{W})(\mathbf{I} - \mathbf{W}^\top)$的最小的d个非零特征值对应的特征向量组成)
+    \item \textbf{Notes/Limitations}:
+    \begin{itemize}
+        \item \textbf{Neighborhood size $k$}: Cannot be too small (insufficient neighbors) or too large (loses local linearity).
+        \item \textbf{Out-of-sample extension}: LLE cannot directly handle new data; the entire dataset must be recomputed for new samples.
+        (人话就是LLE不能处理新数据, 必须重新计算整个数据集才能处理新样本)
+    \end{itemize}
+\end{itemize}
+
+\subsection{t-distributed stochastic neighbor embedding(t-SNE)}
+Given high-dimensional data $\{\mathbf{x}_1, \dots, \mathbf{x}_N\}$
+\begin{itemize}
+    \item \textbf{Conditional Probability}: $p_{j|i}$ denotes the probability that $\mathbf{x}_j$ is a neighbor of $\mathbf{x}_i$:
+    $$p_{j|i} = \frac{\exp(-\|\mathbf{x}_i - \mathbf{x}_j\|^2 / 2\sigma_i^2)}{\sum_{k \neq i} \exp(-\|\mathbf{x}_i - \mathbf{x}_k\|^2 / 2\sigma_i^2)}, \quad p_{i|i} = 0$$
+    \begin{itemize}
+        \item $p_{j|i}$: Probability of $\mathbf{x}_j$ being a neighbor of $\mathbf{x}_i$ (i,j 作为邻居的概率)
+        \item $\sigma_i$: the size of the neighborhood around $\mathbf{x}_i$ (邻域大小)\\
+        (不同的数据点,$、sigma_i$ 不同,其定义了我们试图保留的邻域结构, 根据困惑度 (Perplexity)来计算得出, t-SNE 降维最后的结果与这个值高度相关)
+    \end{itemize}
+    \item \textbf{Bandwidth $\sigma_i$}: Sets the local neighborhood size, typically determined by user-defined \textbf{Perplexity}.
+    \item \textbf{Joint Probability (Symmetry)}: To ensure $p_{ij} = p_{ji}$, define:
+    $$p_{ij} = \frac{p_{j|i} + p_{i|j}}{2N}, \quad \text{s.t. } \sum_{i,j} p_{ij} = 1, p_{ii} = 0,(关键性质)$$
+    \item \textbf{Perplexity}: A measure of the effective number of neighbors:
+    $$\text{perp}(i) = 2^{H(p_{j|i})}, \quad H(p_{j|i}) = -\sum_{j=1}^N p_{j|i} \log p_{j|i}$$
+    \begin{itemize}
+        \item Low perplexity $\implies$ distribution is good at predicting the sample (focusses on local structure).
+        (人话就是低的困惑度意味着分布更好地预测样本, 关注局部结构)
+        \item $\sigma_i$ is tuned (e.g., via bisection(二分法)) to match the target perplexity.
+        (找到一个$\sigma_i$ ，使得以该点为中心计算出来的 Perplexity 等于用户指定的目标 Perplexity, 二分法是一种有效的方法)
+        \item \textbf{Typical values: 5--50}.
+    \end{itemize}
+    
+    \newpage
+    \item \textbf{t-SNE: Objective and Optimization}:
+    \begin{itemize}
+        \item \textbf{Low-dimensional Similarity $q_{ij}$}: Uses Student's t-distribution (d.o.f.=1) to define similarity in embedding space $\mathbf{z}_i \in \mathbb{R}^d$:
+        $$q_{ij} = \frac{(1 + \|\mathbf{z}_i - \mathbf{z}_j\|^2)^{-1}}{\sum_{k} \sum_{l \neq k} (1 + \|\mathbf{z}_k - \mathbf{z}_l\|^2)^{-1}}$$
+        \item \textbf{Cost Function}: Minimize the KL-divergence between $P$ and $Q$:
+        $$\mathcal{L} := \text{KL}(P \| Q) = \sum_{i \neq j} p_{ij} \log \frac{p_{ij}}{q_{ij}}$$
+        \item \textbf{Gradient}: Optimization via gradient descent:
+        $$\frac{\partial \mathcal{L}}{\partial \mathbf{z}_i} = \sum_{j} (p_{ij} - q_{ij})(\mathbf{z}_i - \mathbf{z}_j)(1 + \|\mathbf{z}_i - \mathbf{z}_j\|^2)^{-1}$$
+        \item \textbf{update}: $$\mathbf{z}_i^{(t+1)} = \mathbf{z}_i^{(t)} - \eta \frac{\partial \mathcal{L}}{\partial \mathbf{z}_i}$$
+    \end{itemize}
+    \item \textbf{Notes/Limitations}:
+    \begin{itemize}
+        \item \textbf{Visualization}: Primarily used for 2D or 3D visualization.
+        \item \textbf{Complexity}: Computationally expensive; suitable for datasets with a few thousand points.
+        \item \textbf{Perplexity Sensitivity}: Results depend heavily on perplexity; different values may reveal different structures.
+        (结果高度依赖困惑度) 
+        \item \textbf{Out-of-sample}: Cannot handle new data directly; requires recomputation of the entire dataset.
+    \end{itemize}
+\end{itemize}
+
+\subsection{Autoencoder, 自编码器}
+\begin{itemize}
+    \item \textbf{Core Idea}: A neural network that learns to copy its input to its output. It compresses input into a lower-dimensional latent space (Encoder) and then reconstructs the output (Decoder).
+    (人话就是一个神经网络，自我学习将输入复制到输出。它将输入压缩到一个低维的潜在空间（编码器），然后再重构输出（解码器）)
+    \item \textbf{Structure}:
+    \begin{itemize}
+        \item \textbf{Encoder}: $h = f(\mathbf{x}) = \sigma(\mathbf{W}\mathbf{x} + \mathbf{b})$, where $\sigma$ is an activation function (e.g., sigmoid, ReLU).
+        \item \textbf{Decoder}: $\hat{\mathbf{x}} = g(h) = \sigma(\mathbf{W}'h + \mathbf{b}')$.
+    \end{itemize}
+    \item \textbf{Objective}: Minimize reconstruction error(最小化重建误差):
+    $$\min_{\theta} \frac{1}{2} \sum_{i=1}^N \|\mathbf{x}_i - g(f(\mathbf{x}_i))\|^2$$
+    where $\theta$ represents all weights and biases.
+    \item \textbf{Training}: Optimized via backpropagation and gradient descent.
+\newpage
+    \item \textbf{Variants}:
+    \begin{itemize}
+        \item \textbf{Stacked AE (SAE), 栈式自编码器}: Multi-layer encoder/decoder for deeper feature learning. Supports \textbf{out-of-sample extension} (unlike PCA/LLE/t-SNE).
+        (这个东西可以直接对新数据进行编码)
+        \item \textbf{Convolutional AE (CAE), 卷积自编码器}: Replaces fully connected layers with convolutional layers; suitable for image data.
+    \end{itemize}
+\end{itemize}
+
+\section{Lec7: Generative Models}
 to be continued...
 \end{document}
