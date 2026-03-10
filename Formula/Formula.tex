@@ -369,10 +369,10 @@ Most modern systems are hybrid recommenders.
     \end{itemize}
     \paragraph{3.1.4.2 Ranking-based Metrics(基于排序的指标)}
     \begin{itemize}
-        \item \textbf{Precision@K:} fraction of top-$K$ recommended items that are relevant(人话：前K个推荐中有多少是相关的).
+        \item \textbf{Precision@K:} fraction of top-$K$ recommended items that are relevant(人话：前K个推荐中有多少是用户喜欢(相关的)).
         \[\text{Prec}(R)_k = \frac{|\{r \in R:\ r \le k\}|}{k}\]
 
-        \item \textbf{Recall@K:} fraction of relevant items covered in top-$K$(人话：前K个推荐覆盖了多少相关的物品).
+        \item \textbf{Recall@K:} fraction of relevant items covered in top-$K$(人话：前K个推荐中，用户喜欢的相关物品占用户喜欢的物品总数).
         \[\text{Recall}(R)_k = \frac{|\{r \in R:\ r \le k\}|}{|R|}\]
         \begin{itemize}
             \item (Precision = TP/(TP+FP); Recall = TP/(TP+FN)).
@@ -399,6 +399,7 @@ Most modern systems are hybrid recommenders.
             \text{DCG}_5 &= \frac{2^{3}-1}{\log_2(1+1)} + \frac{2^{2}-1}{\log_2(2+1)} + \frac{2^{1}-1}{\log_2(3+1)} + \frac{2^{0}-1}{\log_2(4+1)} + \frac{2^{2}-1}{\log_2(5+1)} \approx 10.5538,\\
             \text{IDCG}_5 &= \text{DCG}_5(\text{sorted rel}=[3,2,2,1,0]) \approx 10.8235,\\
             \text{NDCG}_5 &= \dfrac{\text{DCG}_5}{\text{IDCG}_5} \approx 0.975.
+            人话说 IDCG 是理想情况下的 DCG（相关性排序），就是 DCG 计算的时候按照相关性降序排序计算
             \end{align*}
         \end{itemize}
     (这一坨又是什么玩意？)
@@ -577,7 +578,7 @@ Therefore
     taking the eigenvector corresponding to the \textbf{second smallest eigenvalue} as the relaxed solution.
     \item Equivalently, use the normalized Laplacian $\widetilde{L}=D^{-1}L=I-D^{-1}W$.\\ Obtain a binary partition by thresholding $u$ at $0$: $i\in A$ if $u_i\ge0$, else $i\in B$.
     \item Extend to $k$ clusters by using the first $k$ nontrivial eigenvectors and applying $k$-means (spectral clustering).
-    \item (人话：2类划分找第二小特征值对应的特征向量，k类划分用前k个非平凡特征向量，然后k-means聚类。)
+    \item (人话：2类划分找第二小特征值对应的特征向量，直接用正负号判断。而k类划分用前k个非平凡特征向量，然后要多一步k-means聚类，不能直接简单的判断符号。)
 \end{itemize}
 (事实上还是没看懂，插个眼以后复习的时候看看有没有什么需要补的)
 
@@ -713,6 +714,109 @@ The graph-based algorithm operates with two primary goals:
 其实到最后也不知道这一讲到底细讲了什么，并没有什么公式(雾)
 
 \section{Lec5: GNN}
+
+\subsection{Graph Data and Related Tasks}
+\begin{itemize}
+    \item \textbf{Graph Data}: $G = (V, E)$, $|V|=n$. 
+    \begin{itemize}
+        \item Vertices $V = \{v_1, \dots, v_n\}$, Edges $E = \{e_1, \dots, e_l\}$.
+        \item Affinity matrix $\mathbf{A} \in \mathbb{R}^{n \times n}$, Node feature matrix $\mathbf{X} \in \mathbb{R}^{n \times d}$.
+        \item Affinity matrix(亲和矩阵) , 也叫 Similarity matrix(相似矩阵)，反映了节点之间的关系
+    \end{itemize}
+    \item \textbf{Tasks}:
+    \begin{itemize}
+        \item \textbf{Node Embedding}: $(\mathbf{A}, \mathbf{X}) \to \mathbf{Z} \in \mathbb{R}^{n \times k}$ (Represent each node as a vector).
+        (人话就是把每个节点表示成一个向量，具体方法这里不用深究)
+        \item \textbf{Graph Embedding}: $\mathcal{G} = \{G_1, \dots, G_N\}$, $(\mathbf{A}_i, \mathbf{X}_i) \to \mathbf{g}_i \in \mathbb{R}^k$.
+        (人话：把每个图表示成一个向量)
+        \item \textbf{Classification}: Node-level ($v_i \to y_i$) or Graph-level ($G_i \to y_i$).
+        \item \textbf{Others}: Link prediction, clustering, etc.
+    \end{itemize}
+    \item \textbf{Traditional Embedding Methods}: Laplacian embedding, Deepwalk, LINE, node2vec.(了解就好)
+    \item \textbf{Graph Embedding Methods}: Methods based on node embeddings, Graph kernels(了解就好)
+    \item \textbf{Graph neural networks (GNNs)}: NNs that operate on graph-structured data.
+    \begin{itemize}
+        \item \textbf{Main Idea}: Pass messages between pairs of nodes and agglomerate.
+        \item \textbf{Alternative Interpretation}: Pass messages between nodes to refine node (and possibly edge) representations.
+    \end{itemize}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.8\textwidth]{figures/GNNs.png}
+        \caption{Graph Neural Networks Architecture}
+    \end{figure}
+\end{itemize}
+\newpage
+\subsection{Graph Convolutional Networks (GCNs)}
+\begin{itemize}
+    \item \textbf{Graph Convolution}: $\mathbf{H}^{(l+1)} = \sigma(\mathbf{\hat{A}}\mathbf{H}^{(l)}\mathbf{W}^{(l)})$.
+    \begin{itemize}
+        \item $\sigma$: Activation function (e.g., ReLU, Sigmoid).
+        \item $\mathbf{W}^{(l)} \in \mathbb{R}^{d_l \times d_{l+1}}$: Parameter matrix.
+        \item $\mathbf{\hat{A}} = \tilde{\mathbf{D}}^{-1/2}\tilde{\mathbf{A}}\tilde{\mathbf{D}}^{-1/2}$, where $\tilde{\mathbf{A}} = \mathbf{A} + \mathbf{I}$, $\tilde{\mathbf{D}} = \text{diag}(\sum_j \tilde{\mathbf{A}}_{ij})$.
+        \item $\mathbf{H}^{(l+1)} \in \mathbb{R}^{n \times d_{l+1}}$: Output of $l$-th GCN layer.
+        \item $\mathbf{H}^{(0)} = \mathbf{X} \in \mathbb{R}^{n \times d}$: Input feature matrix.
+    \end{itemize}
+    \item \textbf{Why GCNs work (optional)}: GCN is an approximated spectral convolution.
+    \begin{enumerate}
+        \item $g_\theta * \mathbf{x} = g_\theta(\mathbf{L})\mathbf{x} = \mathbf{U}g_\theta(\Lambda)\mathbf{U}^\top \mathbf{x}$, where $\mathbf{L} = \mathbf{I} - \mathbf{D}^{-1/2}\mathbf{A}\mathbf{D}^{-1/2} = \mathbf{U}\Lambda\mathbf{U}^\top$.
+        \item Chebyshev polynomials approx: $g_\theta(\mathbf{L})\mathbf{x} \approx \sum_{k=0}^K \theta_k T_k(\tilde{\mathbf{L}})\mathbf{x}$, where $\tilde{\mathbf{L}} = \frac{2}{\lambda_{\text{max}}}\mathbf{L} - \mathbf{I}$.
+        \item $T_k(a) = 2a T_{k-1}(a) - T_{k-2}(a)$, with $T_0(a)=1, T_1(a)=a$.
+        \item Set $K=1, \lambda_{\text{max}} \approx 2 \implies g_\theta * \mathbf{x} \approx \theta_0 \mathbf{x} - \theta_1 \mathbf{D}^{-1/2}\mathbf{A}\mathbf{D}^{-1/2}\mathbf{x}$.
+        \item Assume $\theta = \theta_0 = -\theta_1 \implies g_\theta * \mathbf{x} \approx \theta(\mathbf{I} + \mathbf{D}^{-1/2}\mathbf{A}\mathbf{D}^{-1/2})\mathbf{x}$.
+        \item Renormalization trick: $\mathbf{I} + \mathbf{D}^{-1/2}\mathbf{A}\mathbf{D}^{-1/2} \to \tilde{\mathbf{D}}^{-1/2}\tilde{\mathbf{A}}\tilde{\mathbf{D}}^{-1/2} = \hat{\mathbf{A}}$.\newline
+    (反正是 optional, 看一眼得了, 叽里咕噜也不知道在说什么)
+    \end{enumerate}
+    \item \textbf{Commonly used architecture}: $\mathbf{Z} = f(\mathbf{X}, \mathbf{A}) = \text{softmax}(\hat{\mathbf{A}} \text{ReLU}(\hat{\mathbf{A}}\mathbf{X}\mathbf{W}^{(0)})\mathbf{W}^{(1)})$. (注意到，只有两层)
+    \item \textbf{Over-smoothing(过平滑)}: Deep GCNs perform poorly because graph convolution is essentially a smoothing operation. 
+    \begin{itemize}
+        \item Applying $\hat{\mathbf{A}}$ enough times causes node features to converge to the same value, 
+        losing discriminative information.(收敛到相同的值导致丢失判别信息)
+    \end{itemize}
+    \item \textbf{The Application of GCNs}:
+    \begin{itemize}
+        \item \textbf{Node Classification}: Predict labels for unlabeled nodes given partially labeled nodes.
+        \begin{itemize}
+            \item $Y_L$: Set of labeled node indices.
+            \item $Y \in \{0,1\}^{L \times K}$: Label matrix.
+            \item Loss (Semi-supervised): $\mathcal{L} = - \sum_{i \in Y_L} \sum_{k=1}^K Y_{ik} \ln Z_{ik}$.
+        \end{itemize}
+        \item \textbf{Graph Classification}: Classify a set of graphs into $K$ categories.
+        \begin{itemize}
+            \item \textbf{READOUT function}: Computes graph features from node features.(从节点特征计算图特征)
+            \item Sum: $\mathbf{h}_G = \sum_{i=1}^{n_G} \mathbf{h}_i$; Average: $\mathbf{h}_G = \frac{1}{n_G} \sum_{i=1}^{n_G} \mathbf{h}_i$; Min/Max pooling.
+            \item Loss (Supervised): $\mathcal{L} = - \sum_j \sum_{k=1}^K \mathbf{Y}_{jk} \ln \mathbf{Z}_{jk}$.
+        \end{itemize}
+        \item \textbf{Link Prediction}: Predict new edges in a graph $G$.
+        \begin{itemize}
+            \item Loss: $\mathcal{L} = - \sum_{(i,j) \in \Omega} (A_{ij} \ln \sigma(\mathbf{z}_i^\top \mathbf{z}_j) + (1 - A_{ij}) \ln(1 - \sigma(\mathbf{z}_i^\top \mathbf{z}_j)))$.
+            \item $\sigma$ is the sigmoid function.
+        \end{itemize}
+        (这几把又是什么玩意？)
+    \end{itemize}
+
+    \subsection{Other Graph Neural Networks(optional)}
+    \begin{itemize}
+        \item \textbf{GraphSAGE (Inductive Learning)}: Overcomes GCN's transductive limitation by learning aggregator functions.
+        \begin{enumerate}
+            \item Initialize: $\mathbf{h}_v^0 \leftarrow \mathbf{x}_v, \forall v \in \mathcal{V}$.
+            \item For $k=1 \dots K$:
+            \begin{itemize}
+                \item Aggregate: $\mathbf{h}_{\mathcal{N}(v)}^k \leftarrow \text{AGGREGATE}_k(\{\mathbf{h}_u^{k-1}, \forall u \in \mathcal{N}(v)\})$.
+                \item Update: $\mathbf{h}_v^k \leftarrow \sigma \left( \mathbf{W}^k \cdot \text{CONCAT}(\mathbf{h}_v^{k-1}, \mathbf{h}_{\mathcal{N}(v)}^k) \right)$.
+            \end{itemize}
+            \item Normalize: $\mathbf{h}_v^k \leftarrow \mathbf{h}_v^k / \|\mathbf{h}_v^k\|_2$. Output: $\mathbf{z}_v \leftarrow \mathbf{h}_v^k$.
+        \end{enumerate}
+
+        \item \textbf{Graph Attention Network (GAT)}: Uses attention to assign weights to neighbors instead of fixed weights.
+        \begin{itemize}
+            \item Self-attention: $e_{ij} = a(\mathbf{W}\mathbf{h}_i, \mathbf{W}\mathbf{h}_j) = \text{LeakyReLU}(\mathbf{a}^\top [\mathbf{W}\mathbf{h}_i \| \mathbf{W}\mathbf{h}_j])$.
+            \item Attention coefficient: $\alpha_{ij} = \frac{\exp(e_{ij})}{\sum_{k \in \mathcal{N}_i} \exp(e_{ik})}$.
+            \item Output: $\mathbf{h}_i' = \sigma \left( \sum_{j \in \mathcal{N}_i} \alpha_{ij} \mathbf{W}\mathbf{h}_j \right)$.
+            \item Multi-head: $\mathbf{h}_i' = \|_{m=1}^M \sigma \left( \sum_{j \in \mathcal{N}_i} \alpha_{ij}^{(m)} \mathbf{W}^{(m)}\mathbf{h}_j \right)$.
+        \end{itemize}
+    \end{itemize}
+    很好，依然是 optional, 依然看不懂一点
+\end{itemize}
+\section{Lec6: Non-Linear Dimensionality Reduction}
 to be continued...
-Happy new year! 
 \end{document}
