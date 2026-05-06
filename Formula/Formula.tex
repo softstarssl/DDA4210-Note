@@ -11,6 +11,8 @@
 \graphicspath{{figures/}} % 告诉 LaTeX 图片都在 figures 文件夹里
 
 \usepackage{float}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, fit, backgrounds}
 % 调整页边距，提高空间利用率
 \geometry{
     a4paper,
@@ -1142,6 +1144,279 @@ Given high-dimensional data $\{\mathbf{x}_1, \dots, \mathbf{x}_N\}$
         \item \textbf{Pros}: Higher generation quality than VAE/GAN; Explicit probability distribution.
         \item \textbf{Cons}: Time-consuming training; Slow sampling generation due to large $T$ (e.g., $T=1000$).
     \end{itemize}
-    
+
 \end{itemize}
+
+\section{Lec8: Foundation Models}
+\subsection{Introduction}
+\begin{itemize}
+    \item \textbf{Definition}: Large-scale pre-trained models serving as a general-purpose basis for downstream tasks.
+    \item \textbf{Adaptation}: Trained on vast data, fine-tuned for specific applications via transfer learning, prompting, or few-shot learning.
+    \item \textbf{Applications}: Key to modern NLP (e.g., BERT, GPT-3, CLIP) and CV (e.g., DALL$\cdot$E, Stable Diffusion, BEiT, SORA).
+    \item \textbf{Architecture}: Built on multiple neural networks like MLP, CNN, RNN, and Transformer.
+\end{itemize}
+
+\subsection{BERT (2018)}
+\begin{itemize}
+    \item \textbf{Concept}: Bidirectional Encoder Representations from Transformers, designed for context understanding.
+    \item \textbf{Architecture}: Encoder-only Transformer.
+    \item \textbf{Pre-training}: Masked Language Modeling (MLM) and Next Sentence Prediction (NSP).
+    \item \textbf{Data/Training}: Trained on BookCorpus and Wikipedia; Base (110M) and Large (340M) versions.
+    \item \textbf{Fine-tuning}: Adapt to specific tasks (e.g., Sentiment Analysis, QA) 
+    with fewer resources and smaller datasets.
+    \item 一句话就是，BERT 只有 Transformer 的 Encoder 部分，专注于根据上下文理解文本。
+    核心用处是可以判断某个词在当前语境的意思，或者句子之间的关系。
+
+\end{itemize}
+\subsection{GPT-3 (2020)}
+\begin{itemize}
+    \item \textbf{Concept}: Large language model by OpenAI, capable of human-like text generation and diverse NLP tasks.
+    \item \textbf{Architecture}: Decoder-only Transformer; 175B parameters.
+    \item \textbf{Pre-training}: Self-supervised learning via Next Word Prediction (causal language modeling).
+    \item \textbf{Data}: Trained on hundreds of billions of words (Common Crawl, WebText2, Books, Wikipedia).
+    \item \textbf{Capabilities}: Strong zero/few-shot performance in coding (CSS, Python, etc.), translation, and summarization.
+    \item 一句话就是， GPT-3 只有 Transformer 的 Decoder 部分，专注于根据前文生成文本。
+    训练方式是预测下一个词是什么，可以用来续写文本，或者根据提示生成文本。
+\end{itemize}
+
+\subsection{CLIP (2021)}
+\begin{itemize}
+    \item \textbf{Concept}: Contrastive Language-Image Pre-training by OpenAI.
+    \item \textbf{Objective}: Align text and image representations in a shared vector space, where similar pairs are close and dissimilar ones are far apart.
+    \item \textbf{Architecture}: Consists of a \textbf{Visual Encoder} (ViT or ResNet) and a \textbf{Text Encoder} (Transformer).
+    \item \textbf{Training}: Contrastive pre-training on "WebImageText" (WIT) dataset with 400M image-caption pairs.
+    \item \textbf{Loss Function}: Optimized via a symmetric cross-entropy loss over the similarity matrix:
+    \[ L = -\frac{1}{N} \sum_{i} \ln \frac{e^{v_i^T w_i / T}}{\sum_{j} e^{v_i^T w_j / T}} - \frac{1}{N} \sum_{j} \ln \frac{e^{v_j^T w_j / T}}{\sum_{i} e^{v_i^T w_j / T}} \]
+    \item \textbf{Applications}: Image captioning, text-to-image generation, and zero-shot prediction (using label text as prompts).
+    \item 一句话：通过对比学习将文本和图像映射到同一特征空间。
+    训练时让匹配的图文对向量尽可能接近，不匹配的远离。
+\end{itemize}
+\subsection{Stable Diffusion (2022)}
+\begin{itemize}
+    \item \textbf{Concept}: A deep learning, text-to-image model by Stability AI based on Latent Diffusion Models (LDM).
+    \item \textbf{Architecture}: VAE + UNet + CLIP + Diffusion.
+    \item \textbf{Process}:
+    \begin{itemize}
+        \item \textbf{Pixel Space}: Image $x$ is encoded into latent space $z$ by VAE Encoder $\mathcal{E}$, and decoded back to pixel space $\tilde{x}$ by Decoder $\mathcal{D}$.
+        \item \textbf{Latent Space}: The diffusion process (adding noise) and denoising process occur here. 
+        \item \textbf{Denoising U-Net $\epsilon_\theta$}: Predicts and removes noise using cross-attention mechanisms ($Q, K, V$) and skip connections.
+        \item \textbf{Conditioning}: External guidance (Text, Semantic Map, Images) is injected via a conditioning encoder $\tau_\theta$ into the U-Net.
+    \end{itemize}
+    \item \textbf{Scale}: Version XL contains 3.5 billion parameters.
+    \item 一句话：在潜空间 (Latent Space) 进行扩散和去噪的文生图模型，利用 VAE 降维以提高效率，并通过 Cross-Attention 引入文本引导。
+\end{itemize}
+\subsection{LoRA: Low-Rank Adaptation}
+\begin{itemize}
+    \item \textbf{Concept}: Efficiently fine-tune large pre-trained models by decomposing the weight update matrix into two low-rank matrices.
+    \item \textbf{Mathematical Formulation}:
+    \begin{itemize}
+        \item For a pre-trained weight matrix $W \in \mathbb{R}^{d \times d}$, the output is modified as: $h = Wx + \Delta Wx = Wx + ABx$
+        \item where $A \in \mathbb{R}^{d \times r}$ and $B \in \mathbb{R}^{r \times d}$ are trainable parameters, with rank $r \ll d$.
+        \item Full-parameter update loss: $\mathcal{L} = \frac{1}{2} \| Y - WX \|_F^2$, gradient complexity $\mathcal{O}(d^3)$.
+        \item LoRA loss: $\mathcal{L} = \frac{1}{2} \| Y - (W + AB)X \|_F^2$.
+    \end{itemize}
+    \item \textbf{Optimization}:
+    \begin{itemize}
+        \item Gradients: $\frac{\partial \mathcal{L}}{\partial A} = -(Y - WX - ABX)(BX)^T$ and $\frac{\partial \mathcal{L}}{\partial B} = -A^T (Y - WX - ABX)X^T$.
+        \item Complexity: Total time complexity reduced to $\mathcal{O}(d^2 r + r^2 d)$, which is significantly less than $\mathcal{O}(d^3)$ when $r \ll d$.
+    \end{itemize}
+    \item 一句话：不改变预训练权重 $W$，只训练降维后的 $A$ 和 $B$。极大地减少了计算开销和显存占用。
+\end{itemize}
+
+\subsection{Other Fine-tuning Strategies}
+\begin{itemize}
+    \item \textbf{Partial Fine-tuning}: Fine-tune only a subset of parameters (e.g., top layers or specific layers) while freezing the rest.
+    \item \textbf{Multi-task Fine-tuning}: Train the model on multiple tasks simultaneously to improve generalization.
+    \item \textbf{Adversarial Fine-tuning}: Incorporate adversarial examples to enhance model robustness.
+\end{itemize}
+
+\subsection{Model Compression}
+\begin{itemize}
+    \item \textbf{Knowledge Distillation，知识蒸馏}: A pre-trained Teacher model guides the training of a smaller Student model, transferring generalization ability at a reduced scale.
+    \begin{itemize}
+        \item \textbf{Loss function}: $\mathcal{L} = \mathcal{L}_{\text{CE}} + \lambda \cdot T^2 \cdot \mathcal{L}_{\text{KL}}$
+        \item \textbf{Student loss (CE)}: $\mathcal{L}_{\text{CE}} = -\sum_i y_i \log(q_i)$, where $y$ is the ground-truth label and $q$ is the Student's predicted probability, $q_i = \frac{\exp(z_i / T)}{\sum_j \exp(z_j / T)}$.
+        \item \textbf{Distillation loss (KL)}: $\mathcal{L}_{\text{KL}} = \sum_i p_i \log\left(\frac{p_i}{q_i}\right)$, where $p$ is the Teacher's predicted probability (soft target at temperature $T=t$).
+        \item \textbf{Temperature $T$}: A higher $T$ smooths the softmax output, letting the Student learn inter-class similarity (dark knowledge). Use $T=1$ at inference.
+        \item \textbf{Pros}: Significantly reduces model size while retaining the Teacher's generalization ability.
+        \item \textbf{Cons}: Relies on a high-quality Teacher and requires additional training time.
+    \end{itemize}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=0.9\linewidth]{Knowledge Distillation.png}
+    \end{figure}
+
+    \item \textbf{Quantization，量化}: Convert model weights and activations from floating-point to lower-precision formats to reduce memory and accelerate inference.
+    \begin{itemize}
+        \item \textbf{Formats} (bits = sign + exponent + mantissa):
+        \begin{itemize}
+            \item \texttt{fp32}: 1 + 8 + 23 bits
+            \item \texttt{fp16}: 1 + 5 + 10 bits
+            \item \texttt{bfloat16}: 1 + 8 + 7 bits (same exponent range as fp32, reduced precision)
+            \item \texttt{int8}: 8 bits integer; \texttt{int4}: 4 bits integer
+        \end{itemize}
+        \item \textbf{Example} (3.12345): \texttt{fp16} $\to$ \texttt{0 10000 1000111110}; \texttt{int4} $\to$ \texttt{0011}
+        \item \textbf{Pros}: Greatly reduces memory usage and accelerates inference.
+        \item \textbf{Cons}: Aggressive quantization may lead to significant accuracy loss.
+    \end{itemize}
+
+    \item \textbf{Factorization，分解}: Decompose large weight matrices into smaller ones.
+    \begin{itemize}
+        \item \textbf{Pros}: Mathematically sound; significantly reduces parameters.
+        \item \textbf{Cons}: Decomposition may introduce errors, requiring retraining to recover performance.
+    \end{itemize}
+
+    \item \textbf{Pruning，剪枝}: Remove redundant parameters or structures to simplify the network.
+    \begin{itemize}
+        \item \textbf{Pros}: Significantly reduces parameters and computation; may improve generalization.
+        \item \textbf{Cons}: Unstructured pruning requires specialized hardware to support sparse computation.
+    \end{itemize}
+\end{itemize}
+
+\subsection{Challenges}
+\begin{itemize}
+    \item \textbf{Introduction}
+    \begin{itemize}
+        \item \textbf{Hallucination}: LLMs occasionally generate plausible but incorrect content that (1) diverges from user's input, (2) misaligns with established knowledge, or (3) contradicts previously generated context.
+        \item \textbf{Interpretability}: Difficult to understand why a model produces a given output.
+        \item \textbf{Limited context length}: Cannot process arbitrarily long inputs.
+        \item \textbf{High compute requirements}: Training and inference demand significant hardware resources.
+    \end{itemize}
+
+    \item \textbf{Hallucination Detection}
+    \begin{itemize}
+        \item \textbf{Perplexity (information theory)}: Uncertainty measure for a discrete distribution:
+        $\mathrm{PPL}(p) = b^{-\sum_x p(x)\log_b p(x)}$, where $b \in \{2, 10, e, \ldots\}$.
+        \item \textbf{Perplexity (LLM)}: For a token sequence $\mathbf{x}=(x_1,\ldots,x_n)$, an LLM with parameters $\theta$ models $p_\theta(x_i \mid \mathbf{x}_{<i})$. Perplexity is:
+        \[
+            \mathrm{PPL}_\theta(\mathbf{x}) = \exp\!\left(-\frac{1}{n}\sum_{i=1}^{n}\log P_\theta(x_i \mid \mathbf{x}_{<i})\right)
+        \]
+        It quantifies the model's uncertainty when encountering new tokens.
+        \item \textbf{Applications of $\mathrm{PPL}_\theta$}:
+        \begin{itemize}
+            \item \textbf{Training signal}: Minimizing PPL $\equiv$ minimizing cross-entropy loss.
+            \item \textbf{Benchmarking}: Compare models on standard datasets (e.g., WikiText-2); lower PPL is better.
+            \item \textbf{Domain check}: Identify which base model best fits a target domain before fine-tuning.
+            \item \textbf{Fluency filter}: Unnatural sentences yield high PPL.
+        \end{itemize}
+        \item \textbf{Limitations of PPL}: Measures statistical fluency, not factual accuracy — a model can achieve low PPL while generating false statements.
+        \item \textbf{EigenScore} {[Chen et al., 2024]}: $E = \frac{1}{K}\sum_{i}^{K} \log(\lambda_i)$, where $\lambda_i$ are eigenvalues; captures semantic consistency across multiple generated responses.
+    \end{itemize}
+    (可恶，还是看不懂吗)
+\end{itemize}
+
+\section{Lec9: AI for Science}
+\subsection{AI for Physics}
+\begin{itemize}
+    \item \textbf{Physical Laws and PDEs}: Most fundamental physical laws are expressed as PDEs. General form:
+    \[
+        F\!\left(x,y,\ldots,t,\,u,\,\frac{\partial u}{\partial x},\frac{\partial u}{\partial y},\ldots,\frac{\partial^2 u}{\partial x^2},\frac{\partial^2 u}{\partial y^2},\frac{\partial u}{\partial t},\frac{\partial^2 u}{\partial t^2},\ldots\right)=0
+    \]
+    ODEs are special, simplified cases. Examples:
+    \begin{itemize}
+        \item \textbf{Newton's Second Law}: $F = m\dfrac{d^2x}{dt^2}$
+        \item \textbf{Heat Transfer}: $\dfrac{\partial u}{\partial t} = \alpha \nabla^2 u$, where $u(x,y,z,t)$ is temperature, $\nabla^2 u = \dfrac{\partial^2 u}{\partial x^2}+\dfrac{\partial^2 u}{\partial y^2}+\dfrac{\partial^2 u}{\partial z^2}$ (Laplacian, spatial curvature), $\alpha$ is thermal diffusivity.
+        \item \textbf{Schr\"{o}dinger Equation}: $i\hbar\dfrac{\partial\psi}{\partial t} = -\dfrac{\hbar^2}{2m}\nabla^2\psi + V\psi$, where $\psi(x,y,z,t)$ is the wave function (probability amplitude), $i\hbar\frac{\partial\psi}{\partial t}$ is time evolution, $-\frac{\hbar^2}{2m}\nabla^2\psi$ is kinetic energy, $V\psi$ is potential energy.
+        \item \textbf{Fluid Mechanics}: Navier-Stokes Equations.
+        \item \textbf{Electromagnetism}: Maxwell's Equations.
+    \end{itemize}
+
+    \item \textbf{Solving PDEs}:
+    \begin{itemize}
+        \item \textbf{Simple PDEs} (e.g., Heat Conduction): analytical solutions, e.g., separation of variables.
+        \item \textbf{Classical methods} (complex PDEs): FEM, FVM, FDM. Limitation: require manual mesh creation; computationally intractable for high-dimensional problems.
+        \item \textbf{Modern AI-based methods}: Neural Operators, Physics-Informed Neural Networks (PINNs). Advantages: mesh-free, overcome the curse of dimensionality, integrate physical laws with sparse data for inverse problems.
+    \end{itemize}
+
+    \item \textbf{Physics-Informed Neural Networks (PINNs)}: Universal function approximators that embed physical laws (PDEs) into the learning process. General PDE form:
+    \[
+        \mathcal{F}(u(z);\gamma) = f(z) \quad z \in \Omega, \qquad \mathcal{B}(u(z)) = g(z) \quad z \in \partial\Omega
+    \]
+    \begin{itemize}
+        \item[$\Omega$:] domain $\subset \mathbb{R}^d$ with boundary $\partial\Omega$
+        \item[$z$:] $:= [x_1,\ldots,x_{d-1};t]$, space-time coordinate
+        \item[$u$:] unknown solution
+        \item[$\gamma$:] physics parameters
+        \item[$f$:] source data function
+        \item[$\mathcal{F}$:] nonlinear differential operator
+        \item[$\mathcal{B}$:] boundary/initial condition operator
+        \item[$g$:] boundary function
+    \end{itemize}
+
+\newpage
+
+    \begin{itemize}
+        \item \textbf{Forward problem}: find $u$ for every $z$ (given $\gamma$).
+        \item \textbf{Inverse problem}: determine $\gamma$ from data.
+        \item \textbf{PINN approximation} [Cuomo et al., JPC 2022]: a neural network $\hat{u}_\theta(z) \approx u(z)$ is trained by minimising:
+        \[
+            \min_\theta\; \omega_\mathcal{F}\mathcal{L}_\mathcal{F}(\theta) + \omega_\mathcal{B}\mathcal{L}_\mathcal{B}(\theta) + \omega_d\mathcal{L}_{\mathrm{data}}(\theta)
+        \]
+        where $\mathcal{L}_\mathcal{F}$ enforces the PDE residual, $\mathcal{L}_\mathcal{B}$ enforces boundary/initial conditions, $\mathcal{L}_{\mathrm{data}}$ fits observed data, and $\omega_\mathcal{F},\omega_\mathcal{B},\omega_d$ are loss weights.
+        \begin{itemize}
+            \item $\mathcal{L}_\mathcal{F}(\theta) = \dfrac{1}{N_c}\displaystyle\sum_{i=1}^{N_c}\|\mathcal{F}(\hat{u}_\theta(z_i)) - f(z_i)\|^2$ \quad (collocation points $\{z_i\}_{i=1}^{N_c}$)
+            \item $\mathcal{L}_\mathcal{B}(\theta) = \dfrac{1}{N_B}\displaystyle\sum_{i=1}^{N_B}\|\mathcal{B}(\hat{u}_\theta(z_i)) - g(z_i)\|^2$ \quad (boundary points)
+            \item $\mathcal{L}_{\mathrm{data}}(\theta) = \dfrac{1}{N_d}\displaystyle\sum_{i=1}^{N_d}\|\hat{u}_\theta(z_i) - u_i^*\|^2$ \quad (observations $\{(z_i, u_i^*)\}_{i=1}^{N_d}$)
+        \end{itemize}
+    \end{itemize}
+
+    \item \textbf{Example: PINN for Wave Equation}. 2D acoustic wave equation:
+    \[
+        \rho\nabla\cdot\!\left(\frac{1}{\rho}\nabla u\right) - \frac{1}{v^2}\frac{\partial^2 u}{\partial t^2} = -\rho\frac{\partial^2 f}{\partial t^2}
+    \]
+    where $u(t,x)$: pressure (wave-field); $f(t,x)$: point source; $v=\sqrt{\kappa/\rho}$: medium velocity; $\rho$: density; $\kappa$: adiabatic compression modulus. When $\rho$ is constant and $f$ negligible:
+    \[
+        \nabla^2 u - \frac{1}{v^2}\frac{\partial^2 u}{\partial t^2} = 0
+    \]
+    \begin{itemize}
+        \item \textbf{Model} ($\hat{u}_\theta$): MLP, 10 layers of width 1024, softplus activations (hidden), linear output. Inputs: $x^{(1)}, x^{(2)}, t$; output: $u$.
+        \item \textbf{Loss}: $L(\theta) = L_p(\theta) + \lambda L_b(\theta)$, where
+        \[
+            L_p(\theta) = \frac{1}{N_p}\sum_{i}\left(\left[\nabla^2 - \frac{1}{v(x_i)^2}\frac{\partial^2}{\partial t^2}\right]\hat{u}_\theta\!\left(x_i^{(1)},x_i^{(2)},t_i\right)\right)^{\!2}
+        \]
+        \[
+            L_b(\theta) = \frac{1}{N_b}\sum_{j}\left(\hat{u}_\theta\!\left(x_j^{(1)},x_j^{(2)},t_j\right) - u_{\mathrm{FD}}\!\left(x_j^{(1)},x_j^{(2)},t_j\right)\right)^{\!2}
+        \]
+        $L_p$: $N_p$ samples with $x_i\in[0,X_{\max}]$, $t_i\in[0,0.2]$;\quad $L_b$: $N_b$ samples with $x_j\in[0,X_{\max}]$, $t_j\in[0,0.02]$.
+    \end{itemize}
+\end{itemize}
+
+\subsection{AI for Chemistry}
+\begin{itemize}
+    \item \textbf{Molecular Properties}: Determine a molecule's real-world function, safety, and value (e.g., drug efficacy, material strength).
+    \begin{itemize}
+        \item \textbf{Typical properties}: Atomization Energy, Free Energy, Heat Capacity, Dipole Moment, Nuclear Magnetic Resonance, Binding Affinity, \ldots
+        \item \textbf{Typical methods}:
+        \begin{itemize}
+            \item Experimental Measurement: slow and expensive.
+            \item Quantum Chemistry (e.g., Density Functional Theory (DFT)): computationally intensive.
+        \end{itemize}
+    \end{itemize}
+
+    \item \textbf{GNN for Molecular Property Prediction}: Input is a molecular graph $G$ with node features $x_v$ and edge features $e_{vw}$.
+    \begin{itemize}
+        \item \textbf{Message passing} (hidden layers):
+        \[
+            m_v^{t+1} = \sum_{w \in N(v)} M_t\!\left(h_v^t,\, h_w^t,\, e_{vw}\right), \qquad
+            h_v^{t+1} = U_t\!\left(h_v^t,\, m_v^{t+1}\right)
+        \]
+        where $M_t$ (message) and $U_t$ (update) are learnable functions. \\
+        Example:
+        $M_t(h_v^t, h_w^t) = c_{vw} h_w^t$, $c_{vw} = (\deg(v)\deg(w))^{-1/2} A_{vw}$;
+        $U_t^v(h_v^t, m_v^{t+1}) = \mathrm{ReLU}(W^t m_v^{t+1})$.
+        \item \textbf{Output}: $\hat{y} = R\!\left(\{h_v^T \mid v \in G\}\right)$, where $R$ is a readout function.
+    \end{itemize}
+
+    \item \textbf{Molecule Graph Generation}: Computationally design novel molecular structures to explore chemical space. Typical deep learning methods:
+    \begin{itemize}
+        \item Autoregressive models [Liu et al., 2018; Mercado et al., 2021]
+        \item Motifs-based models [Jin et al., 2020; Maziarz et al., 2022]
+        \item VAEs and GANs [Zhu et al., 2022]
+        \item Diffusion models [Vignac et al., 2023]
+    \end{itemize}
+\end{itemize}
+\subsection{AI for Biology}
+(不考，哈哈哈哈哈哈哈哈，不写了哈哈哈哈哈)
+
+
 \end{document}
