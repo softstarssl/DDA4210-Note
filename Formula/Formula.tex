@@ -11,6 +11,7 @@
 \graphicspath{{figures/}} % 告诉 LaTeX 图片都在 figures 文件夹里
 
 \usepackage{float}
+\usepackage{mdframed}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta, positioning, fit, backgrounds}
 % 调整页边距，提高空间利用率
@@ -1418,5 +1419,692 @@ Given high-dimensional data $\{\mathbf{x}_1, \dots, \mathbf{x}_N\}$
 \subsection{AI for Biology}
 (不考，哈哈哈哈哈哈哈哈，不写了哈哈哈哈哈)
 
+\section{Lec10: Causal Machine Learning}
+
+\subsection{Introduction}
+Goal: infer the effect of treatment $T$ on outcome $Y$ (e.g., treatment on disease, policy on emissions, social media on mental health).
+
+Two scenarios:
+\begin{itemize}
+    \item \textbf{Observational studies}: cheaper, long-term, but treatment is not randomized — confounding bias exists.
+    \item \textbf{Experimental studies (interventions)}: researchers introduce an intervention; subjects are randomized by chance, eliminating confounding.
+\end{itemize}
+
+Why randomization is not always possible:
+\begin{itemize}
+    \item \textbf{Ethical}: e.g., can't randomize people to smoke.
+    \item \textbf{Infeasible}: e.g., can't randomize countries into economic systems.
+    \item \textbf{Impossible}: e.g., can't change a person's DNA at birth.
+\end{itemize}
+
+\subsection{Confounding Variable}
+A \textbf{confounding variable} (confounder) influences both the dependent and independent variables, causing a spurious association.
+\begin{itemize}
+    \item Confounding is a \textbf{causal} concept; it cannot be described in terms of correlations or associations alone.
+    \item The existence of confounders is a key reason why \textbf{correlation does not imply causation}.
+\end{itemize}
+
+\subsection{Potential Outcomes Framework}
+\textbf{Notation}:
+\begin{itemize}
+    \item $T$: observed treatment; $Y$: observed outcome; $i$: index of a specific unit/individual.
+    \item $Y_i(1)$: potential outcome under treatment ($\text{do}(T=1)$).
+    \item $Y_i(0)$: potential outcome under no treatment ($\text{do}(T=0)$).
+\end{itemize}
+
+\textbf{Individual causal effect}: $Y_i(1) - Y_i(0)$.
+
+\textbf{Average Treatment Effect (ATE)}: expected causal effect of $T$ on $Y$:
+\[
+    \text{ATE} := \mathbb{E}[Y(1) - Y(0)]
+\]
+ATE is defined for both experimental and observational studies.
+
+\textbf{Counterfactual problem}: for one subject, only one potential outcome is observable (factual); the other is counterfactual. Hence individual causal effects cannot be directly computed.
+
+Naive estimate of ATE:
+\[
+    \widehat{\text{ATE}} := \mathbb{E}[Y(1)] - \mathbb{E}[Y(0)]
+\]
+(人话就是，直接比较治疗组和对照组的平均结果，但是显然这是不准确的) \\
+This naive estimate is \textbf{biased} in observational studies due to confounders — the treated and untreated groups may differ systematically (e.g., sicker patients are more likely to choose a specific treatment).
+
+\subsection{Backdoor Adjustment}
+
+When a confounder $C$ affects both $T$ and $Y$, the naive $\mathbb{E}[Y|t]$ conflates causal effect with confounding association. The \textbf{backdoor adjustment} removes this bias by conditioning on $C$ and re-weighting by its marginal distribution:
+\[
+    \mathbb{E}[Y \mid \mathrm{do}(T=t)] = \mathbb{E}_C\,\mathbb{E}[Y \mid t, C] = \sum_c \mathbb{E}[Y \mid t, c]\, P(c)
+\]
+Key insight: use \emph{population} weights $P(c)$ (not treatment-specific weights), breaking the spurious path $T \leftarrow C \rightarrow Y$.
+
+\textbf{Example} (Simpson's paradox): Treatment A appears worse overall (16\% vs.\ 19\%), but is better in every stratum after adjusting for severity $C$:
+\begin{align*}
+    \mathbb{E}[Y \mid \mathrm{do}(A)] &= \tfrac{1450}{2050}(0.15) + \tfrac{600}{2050}(0.30) \approx 0.194 \\
+    \mathbb{E}[Y \mid \mathrm{do}(B)] &= \tfrac{1450}{2050}(0.10) + \tfrac{600}{2050}(0.20) \approx 0.129
+\end{align*}
+So $\text{ATE} = \mathbb{E}[Y|\mathrm{do}(A)] - \mathbb{E}[Y|\mathrm{do}(B)] \approx 0.065 > 0$, confirming A is causally better.
+
+Other methods for ATE estimation: covariate adjustment, propensity scores, instrumental variables.
+
+\subsection{Covariate Adjustment}
+
+Train a regression model $f(x, T)$ on covariates $x = (x_1, \ldots, x_d)$ and treatment $T$ to predict outcome $Y$.
+
+\textbf{Linear model}: assume $Y_t(x) = \beta x + \gamma t + \epsilon_t$, $\mathbb{E}[\epsilon_t] = 0$.
+
+Conditional ATE (CATE):
+\begin{align*}
+    \text{CATE}(x) &= \mathbb{E}_{p(Y_1|x)}[Y_1] - \mathbb{E}_{p(Y_0|x)}[Y_0] \\
+                   &= \mathbb{E}_{\epsilon_0,\epsilon_1}[\beta x + \gamma + \epsilon_1 - \beta x - \epsilon_0] \\
+                   &= \gamma + \mathbb{E}[\epsilon_1] - \mathbb{E}[\epsilon_0] = \gamma
+\end{align*}
+
+Then $\text{ATE} = \mathbb{E}_{p(x)}[\text{CATE}(x)] = \gamma$, i.e., the coefficient on $T$ directly gives the ATE.
+
+\textbf{Non-linear models}: use random forests or neural networks as $f(x,T)$; estimate CATE$(x) = f(x,1) - f(x,0)$ per individual, then average for ATE.
+
+\subsection{Causal Discovery}
+
+\textbf{Causal Discovery}: given a dataset $\mathcal{D}$ of $d$ variables, learn the causal graph structure over them.
+
+Causal graphs are represented as \textbf{DAGs} (Directed Acyclic Graphs): directed graphs with no directed cycles.
+
+Representative algorithms:
+\begin{itemize}
+    \item \textbf{PC algorithm} (Spirtes et al., 2001): constraint-based; uses conditional independence tests to orient edges.
+    \item \textbf{LiNGAM} (Shimizu et al., 2006): assumes linear non-Gaussian additive noise; uses ICA for identification.
+    \item \textbf{CAM} (Bühlmann et al., 2014): score-based with additive noise.
+    \item \textbf{NOTEARS} (Zheng et al., 2018): reformulates DAG learning as a continuous optimization with acyclicity constraint $h(W) = \mathrm{tr}(e^{W \circ W}) - d = 0$.
+    \item \textbf{DAG-GNN} (Yu et al., 2019), \textbf{GraN-DAG} (Lachapelle et al., 2020): neural network-based structure learning.
+    \item \textbf{SCORE} (Rolland et al., 2022): score-function-based causal discovery.
+\end{itemize}
+
+\subsection{PC Algorithm (optional)}
+
+The Peter-Clark (PC) algorithm performs causal discovery via conditional independence tests.
+
+\textbf{Steps}:
+\begin{enumerate}
+    \item Start with a complete undirected graph over all variables.
+    \item Remove edge $(A,B)$ if $A \perp B$ (unconditional independence).
+    \item For each adjacent pair $(A,B)$ and each neighbor $C$ of $A$ or $B$, remove edge $(A,B)$ if $A \perp B \mid C$.
+    \item For each adjacent pair $(A,B)$ and each pair $\{C,D\}$ both adjacent to $A$ or both adjacent to $B$, remove edge $(A,B)$ if $A \perp B \mid \{C,D\}$.
+    \item Orient v-structures: if $A - C - B$ with no edge $A$--$B$, orient as $A \to C \leftarrow B$.
+    \item Propagate orientations using acyclicity and consistency rules.
+\end{enumerate}
+
+\subsection{NOTEARS}
+
+\textbf{Assumption} (Structural Equation Model): graph $G=(V,E)$, $|V|=d$. Let $\pi_j^G$ be the parents of node $j$, $\mathbf{x}_{\pi_j^G}$ the corresponding variables. Each variable satisfies:
+\[
+    x_j := f_j\!\left(\mathbf{x}_{\pi_j^G}\right) + e_j, \quad e_j \sim \mathcal{N}(0, \sigma_j^2),\ \forall j \in V
+\]
+
+\textbf{Key theorem} (Zheng et al., 2018): $\mathbf{W} \in \mathbb{R}^{d\times d}$ is a DAG if and only if
+\[
+    h(\mathbf{W}) \triangleq \mathrm{tr}\!\left(e^{\mathbf{W} \circ \mathbf{W}}\right) - d = 0, \quad \text{where } e^{\mathbf{M}} \triangleq \sum_{k=0}^{\infty} \frac{\mathbf{M}^k}{k!}
+\]
+This converts the combinatorial DAG constraint into a smooth equality constraint.
+
+\textbf{Optimization} (linear SEM, i.e.\ $f_j$ linear):
+\[
+    \min_{\mathbf{W}}\ \frac{1}{2n}\|\mathbf{X} - \mathbf{X}\mathbf{W}\|_F^2 + \lambda\|\mathbf{W}\|_1 \quad \text{s.t. } h(\mathbf{W}) = 0
+\]
+
+\subsection{Categorization of Causal ML Problems}
+\begin{itemize}
+    \item \textbf{Causal supervised learning} (e.g., IFL, IRM)
+    \item Causal generative modeling
+    \item Causal explanations
+    \item Causal fairness
+    \item Causal reinforcement learning
+\end{itemize}
+
+\subsection{Invariant Feature Learning (IFL)}
+
+\textbf{Goal}: identify features of $\mathbf{x}$ that are predictive of $y$ across all environments $\mathcal{E}$, and generalize to a new environment $e_{\mathrm{new}}$.
+
+\textbf{Data}: multi-environment datasets $\left\{(\mathbf{x}_i^e, y_i^e)_{i=1}^{N}\right\}_{e \in \mathcal{E}}$ (e.g., data from different hospitals or seasons).
+
+The learned model should generalize to new environment $e_{\mathrm{new}}$. IFL is closely related to transfer learning.
+
+\subsection{Invariant Risk Minimization (IRM)}
+
+IRM (Arjovsky et al., 2019) learns a representation $\phi: \mathcal{X} \to \mathcal{H}$ and an invariant classifier $w: \mathcal{H} \to \mathcal{Y}$ by minimizing the total risk across all environments, subject to $w$ being simultaneously optimal for every environment:
+\[
+    \min_{\phi,\, w} \sum_{e \in \mathcal{E}} \mathcal{R}^e(w \circ \phi) \quad \text{s.t.} \quad w \in \operatorname*{arg\,min}_{\bar{w}}\ \mathcal{R}^e(\bar{w} \circ \phi) \quad \forall e \in \mathcal{E}
+\]
+where the per-environment risk is $\mathcal{R}^e(f) := \mathbb{E}_{\mathbf{x}^e, y^e}[\ell(f(\mathbf{x}^e), y^e)]$.
+
+This is a bi-level optimization problem and is highly non-convex. The practical relaxation penalizes the gradient norm:
+\[
+    \min_{\phi,\, w} \sum_{e \in \mathcal{E}} \left[\mathcal{R}^e(w \circ \phi) + \lambda \left\|\nabla_w \mathcal{R}^e(w \circ \phi)\right\|^2\right]
+\]
+
+\newpage
+
+\section{Lec11: DP and FL}
+\subsection{Privacy Protection Strategies}
+\begin{itemize}
+    \item De-identify data by removing/modifying personally identifiable information.
+    \item Release only aggregate statistics.
+    \item Design randomized algorithms (e.g., differential privacy).
+    \item Train ML models on-device without centralizing raw data (federated learning).
+\end{itemize}
+
+\subsection{Privacy Attacks}
+\begin{itemize}
+    \item \textbf{Membership inference attack}: determine whether a sample $\mathbf{x}$ was in the training set $\mathcal{D}$; often detectable from model prediction confidence alone.
+    \item \textbf{Unintended memorization attack}: query a language model to recover private text it memorized during training (e.g., fill in masked sensitive fields).
+    \item \textbf{Model inversion attack}: recover information about training data from the trained model's outputs. Even releasing only model weights may leak sensitive information.
+    \item \textbf{Reconstruction attack} (Dinur \& Nissim, 2003): reconstruct private values in database $X$ from query results $q(X)$. E.g., querying ``how many rows satisfying (identifier conditions) have disease $= 1$?'' with enough queries can recover individual records. This attack motivates differential privacy.
+    \item \textbf{Differencing attack}: with side information, even a single aggregate statistic can reveal an individual's sensitive attribute.
+\end{itemize}
+
+\textbf{Why naive strategies fail}:
+\begin{itemize}
+    \item Releasing data with PII removed $\Rightarrow$ model inversion / reconstruction attacks still work.
+    \item Releasing aggregate statistics $\Rightarrow$ differencing and reconstruction attacks.
+    \item Releasing model weights $\Rightarrow$ membership inference and unintended memorization.
+\end{itemize}
+
+\subsection{Randomized Response}
+
+A survey technique that adds randomness to responses to protect individual privacy while preserving population statistics.
+
+\textbf{Protocol} (binary response): flip a coin; if Heads, answer truthfully; if Tails, flip again and answer Yes/No with equal probability. This gives:
+\[
+    \Pr(\text{Yes} \mid \text{Dodge}) = \tfrac{3}{4}, \quad \Pr(\text{Yes} \mid \text{NoDodge}) = \tfrac{1}{4}
+\]
+
+\textbf{Privacy intuition}: given a ``Yes'' answer and prior $\Pr(\text{Dodge})=0.02$, the posterior is only $\approx 0.058$ — beliefs shift little, so the individual is protected.
+
+\textbf{Unbiased estimation}: let $X_\mathrm{T}^{(i)}$ be individual $i$'s true response and $X_\mathrm{R}^{(i)}$ be their randomized response. The truthful MLE is $\hat{\mu}_\mathrm{T} = \frac{1}{N}\sum_{i=1}^N X_\mathrm{T}^{(i)}$. Since
+\[
+    \mathbb{E}\!\left[X_\mathrm{R}^{(i)}\right] = \tfrac{1}{4}(1-\mu_i) + \tfrac{3}{4}\mu_i
+\]
+the unbiased estimator from randomized responses is:
+\[
+    \hat{\mu}_\mathrm{R} = \frac{2}{N}\sum_i X_\mathrm{R}^{(i)} - \frac{1}{2}
+\]
+
+The cost of RR is \textbf{higher variance and lower accuracy} ($\mathrm{Var}$ increases 4$\times$, computational complexity is unaffected) — this is the fundamental \textbf{privacy-utility tradeoff}, motivating Differential Privacy. \\
+(人话就是，保护隐私的代价是准确率降低了，因为随机化增加了噪声，所以方差也增加了，但是不影响计算复杂度)
+\\
+Truthful MLE variance:
+\[
+    \mathrm{Var}(\hat{\mu}_\mathrm{T}) = \frac{1}{N}\mathrm{Var}\!\left(X_\mathrm{T}^{(i)}\right) = \frac{1}{N}\mu(1-\mu)
+\]
+RR estimator variance (the inequality holds because randomization adds noise: $\mathrm{Var}(X_\mathrm{R}^{(i)}) \geq \mathrm{Var}(X_\mathrm{T}^{(i)})$):
+\[
+    \mathrm{Var}(\hat{\mu}_\mathrm{R}) = \frac{4}{N}\mathrm{Var}\!\left(X_\mathrm{R}^{(i)}\right) \geq \frac{4}{N}\mathrm{Var}\!\left(X_\mathrm{T}^{(i)}\right) = 4\,\mathrm{Var}(\hat{\mu}_\mathrm{T})
+\]
+
+\subsection{Differential Privacy (DP，差分隐私)}
+
+Three components:
+\begin{itemize}
+    \item \textbf{Database} $\mathcal{D}$: contains sensitive individual information.
+    \item \textbf{Curator} (trusted): holds $\mathcal{D}$ and responds to queries via a \textbf{mechanism}.
+    \item \textbf{Analyst}: submits queries; receives noisy responses.
+\end{itemize}
+
+\textbf{Neighbouring datasets} $\mathcal{D}_1, \mathcal{D}_2$: two databases differing in exactly one entry.
+
+\textbf{Core idea}: if the mechanism's output distribution is nearly identical on $\mathcal{D}_1$ and $\mathcal{D}_2$, an attacker cannot determine which database was used, thus learning little about any individual.
+
+\begin{mdframed}[linewidth=1.5pt, linecolor=blue!60, backgroundcolor=blue!5,
+    frametitle={\textbf{Definition 1 ($\varepsilon$-DP, Original)}},
+    frametitlebackgroundcolor=blue!40, frametitlerule=true]
+A mechanism $\mathcal{M}$ is \textbf{$\varepsilon$-differentially private} if for any two neighbouring databases $\mathcal{D}_1, \mathcal{D}_2$ and any set $\mathcal{R}$ of possible responses:
+\[
+    \Pr\!\left(\mathcal{M}(\mathcal{D}_1) \in \mathcal{R}\right) \leq \exp(\varepsilon)\,\Pr\!\left(\mathcal{M}(\mathcal{D}_2) \in \mathcal{R}\right)
+\]
+Equivalently, for any response $y$:
+\[
+    \exp(-\varepsilon) \leq \frac{\Pr(\mathcal{M}(\mathcal{D}_1) = y)}{\Pr(\mathcal{M}(\mathcal{D}_2) = y)} \leq \exp(\varepsilon)
+\]
+\end{mdframed}
+人话：无论你在不在数据库里，机制的输出分布最多相差 $e^\varepsilon$ 倍——攻击者无法从输出中判断你的数据是否被使用。$\varepsilon$ 越小隐私越强，$\varepsilon=0$ 时两个数据库完全不可区分。
+
+\begin{mdframed}[linewidth=1.5pt, linecolor=blue!60, backgroundcolor=blue!5,
+    frametitle={\textbf{Definition 2 ($(\varepsilon,\delta)$-DP, Relaxed)}},
+    frametitlebackgroundcolor=blue!40, frametitlerule=true]
+A mechanism $\mathcal{M}$ is \textbf{$(\varepsilon,\delta)$-differentially private} if for any two neighbouring databases $\mathcal{D}_1, \mathcal{D}_2$ and any set $\mathcal{R}$:
+\[
+    \Pr\!\left(\mathcal{M}(\mathcal{D}_1) \in \mathcal{R}\right) \leq \exp(\varepsilon)\,\Pr\!\left(\mathcal{M}(\mathcal{D}_2) \in \mathcal{R}\right) + \delta
+\]
+where $\varepsilon, \delta \geq 0$ and $\delta$ is small, decreasing with $n$.
+\end{mdframed}
+人话：在 $\varepsilon$-DP 基础上允许以最多 $\delta$ 的概率"破防"——相当于以极小概率发生隐私泄露，换来更大的算法设计灵活性（如 Gaussian 机制）。
+
+\subsection{Properties of DP}
+
+\textbf{Property 1 (Posterior bound)}: If $\mathcal{M}$ is $\varepsilon$-DP and an attacker's prior on $x \in \mathcal{D}$ is $p$, then after observing any output $y = \mathcal{M}(\mathcal{D})$:
+\[
+    p \cdot e^{-\varepsilon} \leq \Pr(x \in \mathcal{D} \mid y) \leq p \cdot e^{\varepsilon}
+\]
+人话：DP 从根本上限制了攻击者能从输出中学到多少——后验概率被夹在先验的 $e^{\pm\varepsilon}$ 倍之间，无法大幅更新。
+
+\textbf{Property 2 (Post-processing)}: If $\mathcal{M}$ is $\varepsilon$-DP and $\mathcal{A}$ is any algorithm that does not access $\mathcal{D}$ directly, then $\mathcal{A} \circ \mathcal{M}$ is also $\varepsilon$-DP. Proof: let $\mathcal{Y} = \{y : \mathcal{A}(y) \in \mathcal{O}\}$ be the pre-image of output set $\mathcal{O}$ under $\mathcal{A}$, then
+\begin{align*}
+    \Pr(\mathcal{A}(\mathcal{M}(\mathcal{D}_1)) \in \mathcal{O})
+    &= \Pr(\mathcal{M}(\mathcal{D}_1) \in \mathcal{Y}) \\
+    &\leq \exp(\varepsilon)\,\Pr(\mathcal{M}(\mathcal{D}_2) \in \mathcal{Y}) \\
+    &= \exp(\varepsilon)\,\Pr(\mathcal{A}(\mathcal{M}(\mathcal{D}_2)) \in \mathcal{O})
+\end{align*}
+人话：对 DP 机制的输出做任意后处理（分析、发布、再计算），隐私保证不会变差。
+
+\subsection{Pros and Cons of DP}
+
+\textbf{Advantages}:
+\begin{itemize}
+    \item Rigorous mathematical guarantee; makes no assumptions on the adversary or database.
+    \item Interpretable, quantifiable ($\varepsilon$), and composable formalism.
+    \item De-facto standard in privacy research and industry.
+\end{itemize}
+
+\textbf{Disadvantages}:
+\begin{itemize}
+    \item Can be too restrictive; various relaxations (e.g., $(\varepsilon,\delta)$-DP, Rényi DP) have been proposed.
+    \item Other complementary techniques exist (e.g., homomorphic encryption).
+\end{itemize}
+
+\subsection{Laplace Mechanism}
+
+Add Laplace noise to the query response. The Laplace distribution:
+\[
+    p(y;\, \mu, b) = \frac{1}{2b} \exp\!\left(-\frac{|y - \mu|}{b}\right)
+\]
+
+\begin{mdframed}[linewidth=1.5pt, linecolor=blue!60, backgroundcolor=blue!5,
+    frametitle={\textbf{Definition 3 (Global $\ell_1$ sensitivity)}},
+    frametitlebackgroundcolor=blue!40, frametitlerule=true]
+For neighbouring datasets $\mathcal{D}, \mathcal{D}'$, the global $\ell_1$ sensitivity of a query $f: \mathbb{N}^{|\mathcal{X}|} \to \mathbb{R}^K$ is:
+\[
+    \Delta f = \max_{\mathcal{D},\mathcal{D}'} \left\| f(\mathcal{D}) - f(\mathcal{D}') \right\|_1
+\]
+\end{mdframed}
+人话：$\Delta f$ 衡量单个人的加入/离开最多能让查询结果变化多少，决定了需要加多大的噪声。
+
+The scale parameter is set to $b = \Delta f / \varepsilon$. Example: if $f$ counts individuals in $k$ disjoint buckets, then $\Delta f = 1$ (one person changes exactly one bucket count by 1).
+
+\textbf{Laplace Mechanism:} Output $y = f(\mathcal{D}) + z$, where each $z_i \sim \mathrm{Lap}(\Delta f/\varepsilon)$ i.i.d., i.e.,
+\[
+    y_i \sim \mathrm{Laplace}\!\left(f(\mathcal{D})_i,\, \frac{\Delta f}{\varepsilon}\right), \quad i = 1, 2, \ldots, K.
+\]
+
+\begin{mdframed}[linewidth=1.5pt, linecolor=blue!60, backgroundcolor=blue!5,
+    frametitle={\textbf{Theorem 1 (DP guarantees for Laplace mechanism)}},
+    frametitlebackgroundcolor=blue!40, frametitlerule=true]
+\textit{Let $\varepsilon > 0$ and $f: \mathbb{N}^{|\mathcal{X}|} \to \mathbb{R}^K$. The Laplace mechanism $\mathcal{M}_{\mathrm{Lap}}(\cdot, f, \varepsilon): \mathbb{N}^{|\mathcal{X}|} \to \mathcal{O}$ satisfies $\varepsilon$-DP.}
+\end{mdframed}
+
+\textbf{Proof:}
+\begin{align*}
+\frac{p(y \mid \mathcal{D}_1)}{p(y \mid \mathcal{D}_2)}
+&= \frac{\prod_{i=1}^{K} \frac{\varepsilon}{2\Delta f} \exp\!\left(-\dfrac{\varepsilon\,|f(\mathcal{D}_1)_i - y_i|}{\Delta f}\right)}
+        {\prod_{i=1}^{K} \frac{\varepsilon}{2\Delta f} \exp\!\left(-\dfrac{\varepsilon\,|f(\mathcal{D}_2)_i - y_i|}{\Delta f}\right)} \\[6pt]
+&= \prod_{i=1}^{K} \exp\!\left(\frac{\varepsilon\bigl(|f(\mathcal{D}_2)_i - y_i| - |f(\mathcal{D}_1)_i - y_i|\bigr)}{\Delta f}\right) \\[6pt]
+&\leq \prod_{i=1}^{K} \exp\!\left(\frac{\varepsilon\,|f(\mathcal{D}_2)_i - f(\mathcal{D}_1)_i|}{\Delta f}\right)
+ = \exp\!\left(\frac{\varepsilon \sum_{i=1}^{K}|f(\mathcal{D}_2)_i - f(\mathcal{D}_1)_i|}{\Delta f}\right) \\[6pt]
+&= \exp\!\left(\frac{\varepsilon\,\|f(\mathcal{D}_2) - f(\mathcal{D}_1)\|_1}{\Delta f}\right)
+ \leq \exp(\varepsilon) \qquad \blacksquare
+\end{align*}
+
+\subsection{Exponential Mechanism}
+
+Laplace/Gaussian mechanisms only work for \textbf{numeric queries} and require a sufficiently regular utility function. For non-numeric or discrete output spaces, we need the Exponential Mechanism.
+
+Consider queries $f: \mathbb{N}^{|\mathcal{X}|} \to \mathcal{O}$ with an abstract output space $\mathcal{O}$, e.g.:
+\begin{itemize}
+    \item $\mathcal{O} = \{$`Google', `GitHub', `Jingdong', \ldots$\}$ (websites)
+    \item $\mathcal{O} = \{$`dark', `blond', `white', `brown', `red'$\}$ (hair color)
+\end{itemize}
+
+Define a \textbf{score (utility) function}:
+\[
+    u: \mathbb{N}^{|\mathcal{X}|} \times \mathcal{O} \to \mathbb{R}
+\]
+where $u(\mathcal{D}, o)$ measures how good it is to return $o$ on dataset $\mathcal{D}$. $u$ can be \textbf{arbitrary} and should be designed according to the use-case. The true answer $o = f(\mathcal{D})$ is typically assigned the maximum score.
+
+\begin{mdframed}[linewidth=1.5pt, linecolor=blue!60, backgroundcolor=blue!5,
+    frametitle={\textbf{Definition 4 (Sensitivity of score function)}},
+    frametitlebackgroundcolor=blue!40, frametitlerule=true]
+Let $\mathcal{D}$ and $\mathcal{D}'$ be two neighbouring datasets. The sensitivity of $u: \mathbb{N}^{|\mathcal{X}|} \times \mathcal{O} \to \mathbb{R}$ is:
+\[
+    \Delta u = \max_{o \in \mathcal{O}}\, \max_{\mathcal{D},\mathcal{D}'} \left| u(\mathcal{D}, o) - u(\mathcal{D}', o) \right|
+\]
+\end{mdframed}
+人话：$\Delta u$ 衡量换一个相邻数据集时 score 最多变多少，决定指数分布里加多大的"模糊度"。
+
+\textbf{Exponential Mechanism} $\mathcal{M}_{\mathrm{Exp}}\!\left(\mathcal{D},\, f{:}\,\mathbb{N}^{|\mathcal{X}|}\to\mathcal{O},\, u{:}\,\mathbb{N}^{|\mathcal{X}|}\times\mathcal{O}\to\mathbb{R},\, \varepsilon\right)$: output $o \in \mathcal{O}$ with probability
+\[
+    \Pr[o] = \frac{\exp\!\left(\dfrac{u(\mathcal{D},o)\cdot\varepsilon}{2\Delta u}\right)}{\displaystyle\sum_{o'\in\mathcal{O}} \exp\!\left(\dfrac{u(\mathcal{D},o')\cdot\varepsilon}{2\Delta u}\right)}
+\]
+The distribution is related to Boltzmann distributions (cf.\ softmax regression).
+
+\begin{mdframed}[linewidth=1.5pt, linecolor=blue!60, backgroundcolor=blue!5,
+    frametitle={\textbf{Theorem 2 (DP guarantees for Exponential Mechanism)}},
+    frametitlebackgroundcolor=blue!40, frametitlerule=true]
+\textit{Let $\varepsilon > 0$, $f: \mathbb{N}^{|\mathcal{X}|} \to \mathcal{O}$ and $u: \mathbb{N}^{|\mathcal{X}|} \times \mathcal{O} \to \mathbb{R}$. $\mathcal{M}_{\mathrm{Exp}}(\cdot, f, u, \varepsilon)$ satisfies $\varepsilon$-DP.}
+\end{mdframed}
+人话：只要按上面的概率公式采样输出，就自动满足 $\varepsilon$-差分隐私。
+
+\textbf{Proof:}
+\begin{align*}
+&\frac{\Pr[\mathcal{M}_{\mathrm{Exp}}(\mathcal{D}_1,f,u,\varepsilon)=o]}{\Pr[\mathcal{M}_{\mathrm{Exp}}(\mathcal{D}_2,f,u,\varepsilon)=o]}
+= \frac{\exp\!\left(\dfrac{\varepsilon u(\mathcal{D}_1,o)}{2\Delta u}\right)}{\exp\!\left(\dfrac{\varepsilon u(\mathcal{D}_2,o)}{2\Delta u}\right)}
+\cdot \frac{\displaystyle\sum_{o'\in\mathcal{O}}\exp\!\left(\dfrac{\varepsilon u(\mathcal{D}_2,o')}{2\Delta u}\right)}{\displaystyle\sum_{o'\in\mathcal{O}}\exp\!\left(\dfrac{\varepsilon u(\mathcal{D}_1,o')}{2\Delta u}\right)} \\[8pt]
+&= \exp\!\left(\frac{\varepsilon\bigl(u(\mathcal{D}_1,o)-u(\mathcal{D}_2,o)\bigr)}{2\Delta u}\right)
+\cdot \frac{\displaystyle\sum_{o'\in\mathcal{O}}\exp\!\left(\dfrac{\varepsilon u(\mathcal{D}_2,o')}{2\Delta u}\right)}{\displaystyle\sum_{o'\in\mathcal{O}}\exp\!\left(\dfrac{\varepsilon u(\mathcal{D}_1,o')}{2\Delta u}\right)} \\[8pt]
+&\leq \exp\!\left(\frac{\varepsilon}{2}\right)
+\cdot \frac{\displaystyle\sum_{o'\in\mathcal{O}}\exp\!\left(\dfrac{\varepsilon u(\mathcal{D}_2,o')}{2\Delta u}\right) / \exp\!\left(\dfrac{\varepsilon u(\mathcal{D}_1,o')}{2\Delta u}\right) \cdot \exp\!\left(\dfrac{\varepsilon u(\mathcal{D}_1,o')}{2\Delta u}\right)}{\displaystyle\sum_{o'\in\mathcal{O}}\exp\!\left(\dfrac{\varepsilon u(\mathcal{D}_1,o')}{2\Delta u}\right)} \\[8pt]
+&\leq \exp\!\left(\frac{\varepsilon}{2}\right) \cdot \exp\!\left(\frac{\varepsilon}{2}\right)
+\cdot \frac{\displaystyle\sum_{o'\in\mathcal{O}}\exp\!\left(\dfrac{\varepsilon u(\mathcal{D}_1,o')}{2\Delta u}\right)}{\displaystyle\sum_{o'\in\mathcal{O}}\exp\!\left(\dfrac{\varepsilon u(\mathcal{D}_1,o')}{2\Delta u}\right)}
+= \exp(\varepsilon) \qquad \blacksquare
+\end{align*}
+
+\subsection{Others (Optional)}
+
+\textbf{Gaussian Mechanism:} $f(\mathcal{D}) + z$, $z \sim \mathcal{N}(0, \sigma^2)$, with
+\[
+    \sigma = \frac{\sqrt{2\ln(1.25/\delta)}\,\Delta_2(f)}{\varepsilon}, \qquad
+    \Delta_2(f) = \max_{\mathcal{D},\mathcal{D}'} \|f(D) - f(D')\|_2 \quad (\ell_2 \text{ sensitivity})
+\]
+
+\begin{mdframed}[linewidth=1.5pt, linecolor=black!50, backgroundcolor=black!5,
+    frametitle={\textbf{Theorem 3 (DP guarantees for Gaussian Mechanism)}},
+    frametitlebackgroundcolor=black!25, frametitlerule=true]
+\textit{Let $\varepsilon, \delta > 0$ and $f: \mathbb{N}^{|\mathcal{X}|} \to \mathbb{R}^K$. The Gaussian mechanism $\mathcal{M}_{\mathrm{Gauss}}(\cdot, f, \varepsilon, \delta)$ is $(\varepsilon, \delta)$-DP.}
+\end{mdframed}
+
+\textbf{Simple Composition:}
+
+\begin{mdframed}[linewidth=1.5pt, linecolor=black!50, backgroundcolor=black!5,
+    frametitle={\textbf{Theorem 4 (Multi-dim Composition)}},
+    frametitlebackgroundcolor=black!25, frametitlerule=true]
+\textit{Let $\mathcal{A}_1, \ldots, \mathcal{A}_T$ be $T$ independently chosen algorithms where $\mathcal{A}_t$ satisfies $(\varepsilon_t, \delta_t)$-DP. For any dataset $\mathcal{D}$, let $\mathcal{A}(\mathcal{D}) = (\mathcal{A}_1(\mathcal{D}), \ldots, \mathcal{A}_T(\mathcal{D}))$. Then $\mathcal{A}$ is $(\varepsilon, \delta)$-DP with}
+\[
+    \varepsilon = \sum_{t=1}^{T} \varepsilon_t, \qquad \delta = \sum_{t=1}^{T} \delta_t.
+\]
+\end{mdframed}
+
+\subsection{Federated Learning (FL，联邦学习)}
+
+\textbf{Federated learning} (collaborative learning): trains a model across multiple independent sessions, each using its own local dataset — raw data never leaves the device.
+
+\subsubsection{Objective Function}
+\[
+    f(\Theta; \mathcal{D}) = \frac{1}{K} \sum_{k=1}^{K} f_k(\theta_k;\, \mathcal{D}_k)
+\]
+where $K$ is the number of clients, $\mathcal{D} = \{\mathcal{D}_1, \cdots, \mathcal{D}_K\}$ with $\mathcal{D}_k$ the local dataset of client $k$,
+$\Theta = \{\theta_1, \cdots, \theta_K\}$ with $\theta_k$ the local model parameters, and $f_k$ the local objective of client $k$.
+
+Goal: optimize $f(\Theta;\mathcal{D})$ such that $\theta_1, \cdots, \theta_K$ converge to a common $\theta$.
+
+\subsubsection{Main Steps (repeat until convergence)}
+\begin{enumerate}
+    \item Server selects a random subset of clients and sends them the current global model weights.
+    \item Each selected client computes an updated model using its local data.
+    \item Clients send model updates back to the server.
+    \item Server aggregates the updates (typically by averaging) to construct an improved global model.
+\end{enumerate}
+
+\subsubsection{Normal Assumptions}
+\begin{itemize}
+    \item \textbf{Distributed storage (non-IID):} data is localized to each user's own usage, hard to be representative of the population.
+    \item \textbf{Heterogeneous services (unbalanced):} some users rely much more heavily on particular services than others.
+    \item \textbf{Massively distributed computing:} a large number of devices may be updated simultaneously.
+    \item \textbf{Limited communication:} mobile devices are frequently offline or on slow/expensive connections.
+\end{itemize}
+
+\subsubsection{Architectures}
+\begin{itemize}
+    \item \textbf{Centralized FL:} a central server orchestrates all steps — node selection and model aggregation. Server may become a bottleneck.
+    \item \textbf{Decentralized FL:} no central server; nodes coordinate themselves. Network topology may affect performance.
+    \item \textbf{Heterogeneous FL:} a combination of the above two.
+\end{itemize}
+
+\subsubsection{FedSGD vs.\ FedAvg}
+
+\textbf{FedSGD} (Federated SGD): each client computes local gradient $g_k = \nabla F_k(w_t)$; server averages them weighted by local dataset size and performs one GD step:
+\[
+    w_{t+1} \leftarrow w_t - \eta \sum_{k=1}^{K} \frac{n_k}{n}\, g_k
+\]
+
+\textbf{FedAvg} (Federated Averaging): each client performs multiple local batch updates, then exchanges updated weights rather than gradients:
+\[
+    w_{t+1}^k \leftarrow w_t - \eta g_k, \qquad
+    w_{t+1} \leftarrow \sum_{k=1}^{K} \frac{n_k}{n}\, w_{t+1}^k
+\]
+If all local nodes start from the same initialization, averaging gradients is strictly equivalent to averaging weights.
+(FedAvg 更常用，因为通信效率更高，尤其在网络不稳定的情况下)
+\subsubsection{FL and Differential Privacy}
+FL does \textbf{not} automatically satisfy differential privacy, but local updates can be randomized (e.g., via Gaussian mechanism) to make them differentially private.
+
+人话：FL 本身不保证隐私，数据不出门 $\neq$ 隐私安全，还需要在梯度上加噪声才行。
+
+
+\section{Lec12: Fairness in Machine Learning}
+\subsection{Motivation}
+
+ML provides automated decision making.
+\begin{itemize}
+    \item \textbf{Ideal:} cheaper, more accurate, more impartial decisions that improve our lives.
+    \item \textbf{Reality:} if not carefully designed, automated decisions can encode bias, harm people, and make lives worse.
+\end{itemize}
+
+\subsection{Definition of Fairness}
+
+Common fairness definitions: Fairness Through Unawareness, Fairness Through Awareness, Demographic Parity, Equal Opportunity, Equalized Odds, Treatment Equality, Test Fairness, Counterfactual Fairness, Fairness in Relational Domains, Conditional Statistical Parity.
+
+\begin{itemize}
+    \item \textbf{Fairness Through Unawareness:} an algorithm is fair as long as protected attributes are not explicitly used in decision-making. (Default approach in ML.)
+
+    \textit{Limitations:}
+    \begin{itemize}
+        \item masking sensitive features is hard in practice;
+        \item fails when unprotected attributes are correlated with protected ones.
+    \end{itemize}
+    \item \textbf{Fairness Through Awareness:} an algorithm is fair if it gives similar predictions to similar individuals.
+
+    \item \textbf{Demographic Parity} (a.k.a.\ statistical parity): predictor $\hat{Y}$ satisfies demographic parity if
+    \[
+        P(\hat{Y} \mid A=0) = P(\hat{Y} \mid A=1)
+    \]
+    where $A$ is the protected feature. The likelihood of a positive prediction should be equal across groups.
+
+    \textit{Issues:} independent of the target variable — when suitable candidate fractions differ across groups, demographic parity rejects the optimal classifier and may disadvantage qualified individuals.
+
+    \textit{When to use:} when correcting historical bias in data is the goal (e.g., data where nearly no women were hired).
+
+    \item \textbf{Equal Opportunity:} binary predictor $\hat{Y}$ satisfies equal opportunity w.r.t.\ $A$ and $Y$ if
+    \[
+        P(\hat{Y}=1 \mid A=0,\, Y=1) = P(\hat{Y}=1 \mid A=1,\, Y=1)
+    \]
+    i.e., TPR is equal across groups. Weaker version of Equalized Odds.
+
+    \item \textbf{Equalized Odds:} $\hat{Y}$ satisfies equalized odds w.r.t.\ $A$ and $Y$ if $\hat{Y} \perp A \mid Y$, i.e.,
+    \[
+        P(\hat{Y}=1 \mid A=0,\, Y=y) = P(\hat{Y}=1 \mid A=1,\, Y=y), \quad y \in \{0,1\}
+    \]
+    i.e., both TPR and FPR are equal across groups.
+\end{itemize}
+(这又几把是什么)
+
+\subsection{Categorization of Fairness Definitions}
+\begin{itemize}
+    \item \textbf{Individual Fairness:} give similar predictions to similar individuals. Requires a similarity metric, which is generally hard to find in practice.
+    \item \textbf{Group Fairness} (statistical parity): treat different groups equally. Does not account for individual merits; may favor less qualified group members.
+    \item \textbf{Subgroup Fairness:} combines the best properties of individual and group fairness notions.
+\end{itemize}
+
+\subsection{Impossibility Theorem of Fairness}
+
+\textbf{No Free Lunch in Fairness:} it is impossible to simultaneously satisfy all group fairness definitions (demographic parity, equalized odds, predictive rate parity) except in degenerate cases.
+
+The three major group fairness criteria are \textbf{pairwise incompatible}: satisfying any one generally violates the others. Concretely:
+\begin{itemize}
+    \item If base rates differ across groups, i.e., $P(Y=1 \mid A=0) \neq P(Y=1 \mid A=1)$, then demographic parity and equalized odds cannot both hold for a non-trivial classifier.
+    \item A classifier satisfying equalized odds will typically violate predictive rate parity (calibration within groups), and vice versa.
+\end{itemize}
+
+There is no single ``correct'' definition of fairness. Data scientists must consciously choose which criterion to optimize, based on the context and potential harms of the application.
+
+人话：公平的各种定义之间互相矛盾，不可能同时满足，只能根据具体场景选一个来优化。
+
+\subsection{Fairness Intervention Types}
+
+Three stages to intervene for fairness:
+\begin{itemize}
+    \item \textbf{Pre-processing:} modify the training data to remove bias before training.
+    \item \textbf{In-processing:} incorporate fairness constraints directly into the learning objective. Example:
+    \[
+        \min_{\theta}\ \mathcal{L}(\theta) \quad \text{s.t.} \quad \left|P(\hat{Y} \neq Y \mid A=a) - P(\hat{Y} \neq Y \mid A=b)\right| \leq \epsilon
+    \]
+    \item \textbf{Post-processing:} adjust the model's predictions after training to satisfy fairness criteria.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{"Fairness Intervention Types in Machine Learning"}
+\end{figure}
+
+\subsection{Learning Fair Representations}
+
+Goal: find a representation $Z$ of input $X$ that removes any information about the sensitive attribute $S$, so that vendors can use $Z$ to predict $Y$ freely with fairness guaranteed.
+
+Idea: separate responsibilities — a trusted \textit{society} encodes $X$ into a fair $Z$; an untrusted \textit{vendor} uses $Z$ to make predictions $Y$ without access to sensitive attributes.
+
+\subsubsection{Notation}
+\begin{itemize}
+    \item $X$: entire dataset of individuals; each $\mathbf{x} \in X$ is a vector of length $D$ (attributes of a person).
+    \item $S$: sensitive attribute, $S \in \{0, 1\}$.
+    \item $Z$: multinomial random variable with $K$ values, each representing an intermediate ``prototype''. Each prototype $k$ is associated with a vector $\mathbf{v}_k$ in the same space as $\mathbf{x}$.
+\end{itemize}
+
+\subsubsection{Mapping to Prototypes}
+Softmax over distance to each prototype:
+\[
+    P(Z=k \mid \mathbf{x}) = \frac{\exp(-d(\mathbf{x}, \mathbf{v}_k))}{\sum_{j=1}^{K} \exp(-d(\mathbf{x}, \mathbf{v}_j))}
+\]
+Denote $M_{n,k} = P(Z=k \mid \mathbf{x}_n)$.
+
+\subsubsection{Fairness Constraint and Discrimination Loss}
+Statistical parity requires $M_k^+ = M_k^-,\ \forall k$, where
+\[
+    M_k^+ = \mathbb{E}_{\mathbf{x} \in X^+} P(Z=k \mid \mathbf{x}) = \frac{1}{|X_0^+|} \sum_{n \in X_0^+} M_{n,k}
+\]
+and $M_k^-$ is defined analogously for $X^-$. This is enforced via the discrimination loss:
+\[
+    \mathcal{L}_{\mathrm{discrim}} = \frac{1}{K} \sum_{k=1}^{K} \left|
+        \frac{1}{N_0} \sum_{i:\, s^{(i)}=0} \Pr(Z=k \mid \mathbf{x}^{(i)})
+        - \frac{1}{N_1} \sum_{i:\, s^{(i)}=1} \Pr(Z=k \mid \mathbf{x}^{(i)})
+    \right|
+\]
+\textit{Proof that $\mathcal{L}_{\mathrm{discrim}} = 0 \Rightarrow$ demographic parity:}
+\begin{align*}
+\Pr(Y=1 \mid s^{(i)}=1)
+&= \frac{1}{N_1}\sum_{i:\,s^{(i)}=1}\sum_{k=1}^{K} \Pr(Z=k \mid \mathbf{x}^{(i)})\,\Pr(Y=1 \mid Z=k) \\
+&= \sum_{k=1}^{K} \left[\frac{1}{N_1}\sum_{i:\,s^{(i)}=1} \Pr(Z=k \mid \mathbf{x}^{(i)})\right]\Pr(Y=1 \mid Z=k) \\
+&= \sum_{k=1}^{K} \left[\frac{1}{N_0}\sum_{i:\,s^{(i)}=0} \Pr(Z=k \mid \mathbf{x}^{(i)})\right]\Pr(Y=1 \mid Z=k) \\
+&= \Pr(Y=1 \mid s^{(i)}=0)
+\end{align*}
+
+\subsubsection{Reconstruction ($Z \to \mathbf{x}$)}
+Retains information about $X$ by penalizing reconstruction error:
+\[
+    \hat{\mathbf{x}}_n = \sum_{k=1}^{K} M_{n,k}\, \mathbf{v}_k, \qquad
+    \mathcal{L}_{\mathrm{reconst}} = \frac{1}{N}\sum_{i=1}^{N} \left\|\mathbf{x}^{(i)} - \hat{\mathbf{x}}^{(i)}\right\|^2
+\]
+
+\subsubsection{Prediction ($Z \to \hat{y}$)}
+\[
+    \hat{y}_n = \sum_{k=1}^{K} M_{n,k}\, w_k, \qquad
+    \mathcal{L}_{\mathrm{pred}} = \frac{1}{N}\sum_{i=1}^{N}\left(-y^{(i)}\log\hat{y}^{(i)} - (1-y^{(i)})\log(1-\hat{y}^{(i)})\right)
+\]
+
+\subsubsection{Overall Objective}
+\[
+    \mathcal{L}(\{\mathbf{v}_k\}, \mathbf{w}) = \lambda_1\,\mathcal{L}_{\mathrm{pred}} + \lambda_2\,\mathcal{L}_{\mathrm{reconst}} + \lambda_3\,\mathcal{L}_{\mathrm{discrim}}
+\]
+
+\subsubsection{Experiments}
+\textbf{Datasets:}
+\begin{itemize}
+    \item \textbf{German Credit:} classify credit risk (good/bad); sensitive feature: Age.
+    \item \textbf{Adult Income:} 45,222 instances, 14 attributes; predict annual income $>50$K; sensitive feature: Gender.
+    \item \textbf{Heritage Health:} 147,473 instances, 139 attributes; predict hospital stay; sensitive feature: Age.
+\end{itemize}
+
+\textbf{Evaluation metrics:}
+\begin{itemize}
+    \item Classification accuracy:
+    \[
+        \mathrm{Acc} = 1 - \frac{1}{N}\sum_{n=1}^{N} |y_n - \hat{y}_n|
+    \]
+    \item Discrimination (gap in positive prediction rate between groups):
+    \[
+        \mathrm{Discrim} = \left| \frac{\sum_{i:\,s^{(i)}=1} \hat{y}^{(i)}}{N_1} - \frac{\sum_{i:\,s^{(i)}=0} \hat{y}^{(i)}}{N_0} \right|
+    \]
+\end{itemize}
+
+\subsection{Fair VAE}
+
+Discrete $Z$ based on prototypes is too limiting. Instead, learn a continuous representation with a new fairness criterion: ensure $p(\mathbf{z} \mid s)$ is indistinguishable across different values of $s$.
+
+\subsubsection{Maximum Mean Discrepancy (MMD)}
+
+MMD is a quantitative measure of distance between two distributions. Given a feature map $\psi$:
+\[
+    \mathrm{MMD}(p;\, q) = \left\|\mathbb{E}_{\mathbf{z} \sim p}[\psi(\mathbf{z})] - \mathbb{E}_{\mathbf{z} \sim q}[\psi(\mathbf{z})]\right\|^2
+\]
+If $\psi$ is sufficiently expressive, $\mathrm{MMD}(p;q) = 0$ iff $p = q$ (made precise via kernels).
+
+\subsubsection{VFAE Objective}
+
+Train a VAE with the constraint that the MMD between $p(\mathbf{z} \mid s=0)$ and $p(\mathbf{z} \mid s=1)$ is small \textit{[Louizos et al. 2016]}:
+\begin{itemize}
+    \item Encoder maps input $\mathbf{x}$ to latent code $\mathbf{Z}$ (with MMD constraint).
+    \item Decoder reconstructs $\tilde{\mathbf{x}}$ from $\mathbf{Z}$ and $s$ (decoder receives $s$ since reconstruction would otherwise be impossible).
+    \item Prediction $Y$ is made from $\mathbf{Z}$ only, without access to $s$.
+\end{itemize}
+\[
+    \mathcal{L}_{\mathrm{VFAE}}(\phi, \theta;\, \mathbf{X}) = \mathcal{L}_{\mathrm{VAE}}(\phi, \theta;\, \mathbf{X}) - \beta\,\ell_{\mathrm{MMD}}\!\left(\mathbf{Z}_{\delta\{s=0\}},\, \mathbf{Z}_{\delta\{s=1\}}\right)
+\]
+
+\subsection{Flexibly Fair VAE (FFVAE)}
+
+\subsubsection{Notation}
+
+The latent code is split into two subspaces:
+\begin{itemize}
+    \item $x \in \mathcal{X}$: non-sensitive observations (e.g., pixel values or tabular features).
+    \item $a \in \{0,1\}^{N_a}$: vector of binary sensitive attributes.
+    \item $z \in \mathbb{R}^{N_z}$: non-sensitive subspace of the latent code.
+    \item $b \in \mathbb{R}^{N_b}$: sensitive subspace of the latent code.
+\end{itemize}
+
+\subsubsection{Objectives}
+
+Original VAE objective (with sensitive attributes included):
+\[
+    L_{\mathrm{VAE}}(p,q) = \mathbb{E}_{q(z,b\mid x,a)}\!\left[\log p(x,a \mid z,b)\right] - D_{KL}\!\left[q(z,b\mid x,a)\,\|\,p(z,b)\right]
+\]
+
+Flexibly Fair VAE objective \textit{[Creager et al. 2019]}, which additionally encourages $z \perp b$ (low mutual information) and sensitive attribute predictability from $b$:
+\begin{align*}
+    L_{\mathrm{FFVAE}}(p,q) &= \mathbb{E}_{q(z,b\mid x)}\!\left[\log p(x \mid z,b) + \alpha \log p(a \mid b)\right] \\
+    &\quad - \gamma\, D_{KL}\!\left(q(z,b)\,\Big\|\,q(z)\prod_{j} q(b_j)\right) \\
+    &\quad - D_{KL}\!\left[q(z,b\mid x)\,\|\,p(z,b)\right]
+\end{align*}
+
+\subsubsection{Applications}
+\begin{itemize}
+    \item \textbf{Fair Classification:} use $z$ (free of sensitive info) for downstream prediction.
+    \item \textbf{Predictiveness:} train a classifier to predict sensitive attribute $a_i$ from $b_i$ alone — verifies $b$ captures sensitive information.
+    \item \textbf{Disentanglement:} train a classifier to predict $a_i$ from representations with $b_i$ removed — verifies $z$ is free of sensitive information.
+\end{itemize}
 
 \end{document}
