@@ -2107,4 +2107,180 @@ Flexibly Fair VAE objective \textit{[Creager et al. 2019]}, which additionally e
     \item \textbf{Disentanglement:} train a classifier to predict $a_i$ from representations with $b_i$ removed — verifies $z$ is free of sensitive information.
 \end{itemize}
 
+\section{Lec13: Explanable AI (XAI)}
+\subsection{Motivation}
+
+Explainable AI (XAI) = AI where humans can understand the reasoning behind decisions/predictions. XAI algorithms follow three principles:
+\begin{itemize}
+    \item \textbf{Transparency}: the processes extracting model parameters from training data and generating labels from test data can be described by the designer.
+    \item \textbf{Interpretability}: the possibility of comprehending the ML model and presenting the underlying basis for decision-making in a human-understandable way.
+    \item \textbf{Explainability}: the collection of features of the interpretable domain that contributed to a given prediction (e.g., classification or regression).
+\end{itemize}
+
+ML models can be categorized as \textbf{white-box} or \textbf{black-box}:
+\begin{itemize}
+    \item \textbf{White-box}: results are understandable to domain experts. E.g., linear/logistic regression, kNN, linear SVM, decision tree, GLMs, GAMs, k-means, PCA.
+    \item \textbf{Black-box}: extremely hard to explain even for domain experts. E.g., ensemble learning (XGBoost, LightGBM), kernel methods, neural networks (MLP, CNN, RNN, Transformer, GNN).
+\end{itemize}
+
+\textbf{Key Definitions:}
+\begin{itemize}
+    \item A \textbf{model explanation} attempts to highlight why a model made a prediction.
+    \item A \textbf{feature importance explanation} focuses on each feature's role:
+    \begin{itemize}
+        \item \textit{Feature attribution}: each feature $x_i$ receives a score $a_i \in \mathbb{R}$.
+        \item \textit{Feature selection}: a subset of important features $x_S \in \{x_1, \ldots, x_d\}$.
+    \end{itemize}
+    \item Explanations may be \textbf{local} (individual prediction) or \textbf{global} (overall model behavior).
+    \item An \textbf{explanation algorithm} generates explanations given input data and an ML model.
+\end{itemize}
+
+\subsection{Permutation Test}
+
+\textbf{Permutation test} (a.k.a.\ permutation feature importance) determines \textbf{global} importance of each feature:
+\begin{enumerate}
+    \item Evaluate model accuracy on original data.
+    \item For each feature $x_i$: corrupt it by randomly shuffling that column, then record accuracy drop:
+    \[
+        a_i = \mathrm{Acc}(\text{original}) - \mathrm{Acc}(x_i\ \text{corrupted})
+    \]
+\end{enumerate}
+
+More precisely, the importance score is:
+\[
+    a_i = \frac{1}{n}\sum_{j=1}^{n} \ell\!\left(f\!\left(x_1^j,\ldots,\tilde{x}_i^j,\ldots,x_d^j\right), y^j\right)
+    - \frac{1}{n}\sum_{j=1}^{n} \ell\!\left(f\!\left(x_1^j,\ldots,x_i^j,\ldots,x_d^j\right), y^j\right)
+\]
+where $\ell(\cdot,\cdot)$ is an arbitrary loss function and $\tilde{x}_i^j$ denotes the corrupted (permuted) $i$-th feature.
+
+\textbf{Properties:}
+\begin{itemize}
+    \item Model-agnostic; supports continuous/categorical features.
+    \item Fast and easy to implement.
+    \item Empirical, no theoretical guarantees.
+    \item Problematic for correlated features.
+\end{itemize}
+
+\subsection{Occlusion}
+
+\textbf{Occlusion} explains \textbf{local} predictions for image classifiers by masking regions and measuring the prediction change. It calculates pixel (or super-pixel) importance.
+
+\textbf{Process:}
+\begin{enumerate}
+    \item Make prediction on the full image.
+    \item Occlude each region (replace with zero/uninformative pixels; can use 2$\times$2, 4$\times$4 patches, or super-pixels), record how the prediction changes.
+\end{enumerate}
+
+Mathematically, the importance score of feature $x_i$ is:
+\[
+    a_i = f_y(x_1, \ldots, x_i, \ldots, x_d) - f_y(x_1, \ldots, 0, \ldots, x_d)
+\]
+
+\textbf{Properties:}
+\begin{itemize}
+    \item Works with any model, even non-image data.
+    \item Moderately fast: $d+1$ model evaluations per prediction.
+    \item Easy to implement; empirical, no theoretical guarantees.
+\end{itemize}
+
+\subsection{LIME}
+
+\textbf{LIME} (Local Interpretable Model-agnostic Explanations): feature attribution for an individual sample $\mathbf{x}$.
+
+\textbf{Setup:} Let $\mathbf{x} \in \mathbb{R}^d$ be the sample, $f: \mathbb{R}^d \to \mathbb{R}$ the prediction model, and $\mathbf{x}' \in \{0,1\}^{d'}$ its binary interpretable representation (e.g., patch indicator vector for images). LIME solves:
+\[
+    \xi(\mathbf{x}) = \underset{g \in G}{\mathrm{argmin}}\ \mathcal{L}(f, g, \pi_x) + \Omega(g)
+\]
+where:
+\begin{itemize}
+    \item $g: \{0,1\}^{d'} \to \mathbb{R}$: interpretable model, e.g., $g(z') = \mathbf{w}^\top \mathbf{z}'$.
+    \item $h_x: \{0,1\}^{d'} \to \mathbb{R}^d$: maps $\mathbf{z}'$ back to the original space of $\mathbf{x}$, yielding $\mathbf{z}$.
+    \item $\pi_x(z)$: proximity measure between $\mathbf{z}$ and $\mathbf{x}$, e.g., $\exp(-\|\mathbf{x} - \mathbf{z}\|^2/\sigma^2)$.
+    \item $\mathcal{L}(f, g, \pi_x)$: fidelity loss measuring how unfaithful $g$ approximates $f$ in the locality of $\pi_x$:
+    \[
+        \mathcal{L}(f, g, \pi_x) = \sum_{(\mathbf{z}, \mathbf{z}')} \pi_x(\mathbf{z})\bigl(f(\mathbf{z}) - g(\mathbf{z}')\bigr)^2
+    \]
+    \item $\Omega(g)$: complexity measure of $g$.
+\end{itemize}
+
+\textbf{Main Steps:}
+\begin{enumerate}
+    \item Given $\mathbf{x}$, form $\mathbf{x}'$.
+    \item Sample $\mathbf{z}'$ around $\mathbf{x}'$ by drawing nonzero elements uniformly at random.
+    \item Map each $\mathbf{z}'$ to the original space via $h_x$ to obtain $\mathbf{z}$.
+    \item Solve the weighted regression (e.g., with Lasso):
+    \[
+        \min_{\mathbf{w}}\ \sum_{(\mathbf{z},\mathbf{z}')} \exp\!\left(-\frac{\|\mathbf{x}-\mathbf{z}\|^2}{\sigma^2}\right)\bigl(f(\mathbf{z}) - \mathbf{w}^\top \mathbf{z}'\bigr)^2 + \lambda\|\mathbf{w}\|_1
+    \]
+    \item Use $\mathbf{w}$ to explain: a larger $w_i$ means feature $i$ contributes more to the positive prediction.
+\end{enumerate}
+
+\subsection{SHAP}
+
+\textbf{SHAP} (SHapley Additive exPlanations): based on Shapley values from cooperative game theory (1953). Each feature value is treated as a "player" in a game where the model prediction is the payout. SHAP unifies various existing XAI methods with axiomatic definitions.
+
+\textbf{Shapley Values Setup:}
+\begin{itemize}
+    \item Set of players $D = \{1, \ldots, d\}$; a coalition is any $S \subseteq D$.
+    \item A game is represented by a characteristic function $v: 2^D \to \mathbb{R}$, assigning a value to every coalition.
+    \item Special cases: grand coalition $v(D)$, null coalition $v(\varnothing)$, arbitrary coalition $v(S)$.
+    \item Shapley values allocate credit fairly to players, derived from fairness axioms.
+\end{itemize}
+
+The Shapley value is a function $\phi: G \to \mathbb{R}^d$, assigning one credit per player. For a game $v$, the Shapley values are $\phi_1(v), \ldots, \phi_d(v)$, computed as the weighted average marginal contribution over all coalitions $S \subseteq D \setminus \{i\}$:
+\[
+    \phi_i(v) = \sum_{S \subseteq D \setminus \{i\}} \frac{|S|!\,(d-1-|S|)!}{d!}\bigl[v(S \cup \{i\}) - v(S)\bigr]
+\]
+
+\textbf{Axiomatic uniqueness:} The Shapley value is the \emph{only} attribution method $\phi$ satisfying all four axioms:
+\begin{itemize}
+    \item \textbf{Efficiency}: $\sum_{i \in D} \phi_i(v) = v(D) - v(\varnothing)$.
+    \item \textbf{Symmetry}: If $v(S \cup \{i\}) = v(S \cup \{j\})$ for all $S \subseteq D$, then $\phi_i(v) = \phi_j(v)$.
+    \item \textbf{Null player}: If $v(S \cup \{i\}) = v(S)$ for all $S \subseteq D$, then $\phi_i(v) = 0$.
+    \item \textbf{Linearity}: $\phi(c_1 v_1 + c_2 v_2) = c_1\phi(v_1) + c_2\phi(v_2)$, where $c_1, c_2 \in \mathbb{R}$.
+\end{itemize}
+
+\textbf{SHAP for ML models:} Features are players, model prediction is the payout. The characteristic function is replaced by the ML model retrained on each feature subset $S \subseteq D$:
+\[
+    \phi_i = \sum_{S \subseteq D \setminus \{i\}} \frac{|S|!\,(d-|S|-1)!}{d!}\bigl[f_{S \cup \{i\}}(x_{S \cup \{i\}}) - f_S(x_S)\bigr]
+\]
+Requires retraining the model on all feature subsets $S \subseteq D$.
+
+\textbf{Computation Complexity:} Exact computation is $O(2^d)$ — intractable for $d > 20$. Approximation methods exist (e.g., Kernel SHAP, Deep SHAP).
+
+\textbf{SHAP Methods:}
+\begin{itemize}
+    \item \textbf{Kernel SHAP}: model-agnostic approximation.
+    \item Max SHAP, Deep SHAP: model-type-specific.
+\end{itemize}
+
+\subsubsection{Kernel SHAP}
+
+Kernel SHAP = Linear LIME + Shapley values. Let $g(\mathbf{z}') = w_0 + \sum_{i=1}^d w_i z_i'$, $\mathbf{z}' \in \{0,1\}^{d'}$. Kernel SHAP solves:
+\[
+    \min_{w_0,\ldots,w_d}\ \sum_{\mathbf{z}'_S} \pi(S)\!\left(w_0 + \sum_{i \in S} w_i - f(h_x(\mathbf{z}'_S))\right)^2, \quad
+    \pi(S) = \frac{d-1}{\binom{d}{|S|}|S|(d-|S|)}
+\]
+
+This simplifies to $\min_{\mathbf{w}} \|\mathbf{y}_\pi - \mathbf{U}_\pi \mathbf{w}\|^2$, with closed-form solution $(\mathbf{U}_\pi^\top \mathbf{U}_\pi)^{-1}\mathbf{U}_\pi^\top \mathbf{y}_\pi$. It can be proved that:
+\[
+    w_i = \phi_i = \sum_{S \subseteq D \setminus \{i\}} \frac{|S|!(d-|S|-1)!}{d!}\bigl[f(h_x(z'_{S\cup\{i\}})) - f(h_x(z'_S))\bigr]
+\]
+
+\subsection{XAI Summary}
+
+Removal-based methods are common in XAI (Permutation Test, Occlusion, LIME, SHAP). Other structural approaches:
+\begin{itemize}
+    \item \textbf{Gradient-based} (e.g., Grad-CAM, Gradient$\times$Input): use the gradient of network output w.r.t.\ each input variable.
+    \item \textbf{Propagation-based} (e.g., Deep Taylor, Deep SHAP): use backpropagation to estimate attributions at each layer and propagate them to the previous layer.
+\end{itemize}
+
+\subsection{Interpretable ML vs XAI}
+
+\begin{itemize}
+    \item \textbf{Interpretable ML}: use a white-box model directly (not a black-box).
+    \item \textbf{XAI}: use a black-box model, then use another model to explain it --- start with a black-box, create a proxy model that approximates it, compute derivatives or visualize attention.
+    \item \textbf{Interpretable ML $\neq$ XAI}: XAI introduces ``Double Trouble'' --- relying on two models instead of one, both of which may make mistakes and disagree. If an interpretable model suffices, there is no reason to explain a black-box. (Example: COMPAS vs.\ CORELS)
+\end{itemize}
+
 \end{document}
